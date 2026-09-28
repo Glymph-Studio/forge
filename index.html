@@ -142,7 +142,15 @@
   <div class="boot-warning">forge needs JavaScript to draw. Please enable it and reload.</div>
 </noscript>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+window.__forgeError = null;
+window.addEventListener('error', function (e) {
+  if (!window.__forgeError) {
+    window.__forgeError = (e.message || 'unknown error') +
+      (e.filename ? '  (' + e.filename.split('/').pop() + ':' + (e.lineno || '?') + ')' : '');
+  }
+});
+</script>
 <script src="js/state.js"></script>
 <script src="js/starter-tips.js"></script>
 <script src="js/flow-mode.js"></script>

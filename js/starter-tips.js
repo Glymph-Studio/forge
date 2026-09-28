@@ -1,7 +1,7 @@
 /* ============================================================
-   FORGE — starter-tips.js — 8 programmatically rendered tips
-   Each is a 128×128 canvas. Colors are laid out so Flow mode
-   has interesting palettes out of the box.
+   forge · starter-tips.js · eight tips drawn in code
+   Each is a 128x128 canvas. Colors are laid out so Flow mode has
+   interesting palettes out of the box.
    ============================================================ */
 
 Forge.StarterTips = (function () {
@@ -17,12 +17,16 @@ Forge.StarterTips = (function () {
   }
 
   function linH(x, stops) {
+    if (!x || typeof x.createLinearGradient !== 'function') {
+      console.warn('linH got a bad context, using a flat color instead');
+      return '#ffd66e';
+    }
     const grad = x.createLinearGradient(0, 0, S, 0);
     for (const [o, col] of stops) grad.addColorStop(o, col);
     return grad;
   }
 
-  /* splat — 20–35 random circles (r 2–15) within 60px of center, 50% opacity.
+  /* splat · 20 to 35 random circles (r 2 to 15) within 60px of center, half opacity.
      Hue follows x-position so the flow palette sweeps through the spectrum. */
   make('splat', 'Splatter', x => {
     const n = 20 + Math.floor(Math.random() * 16);
@@ -40,7 +44,7 @@ Forge.StarterTips = (function () {
     x.globalAlpha = 1;
   });
 
-  /* leaf — 30×80 ellipse, pointed via beziers, transparency gradient center→edge */
+  /* leaf · 30x80 ellipse, pointed via beziers, transparency gradient center to edge */
   make('leaf', 'Leaf', x => {
     const g = x.createLinearGradient(C - 15, 0, C + 15, 0);
     g.addColorStop(0,   'rgba(46,160,67,0.55)');
@@ -57,18 +61,18 @@ Forge.StarterTips = (function () {
     x.beginPath(); x.moveTo(C, 30); x.lineTo(C, 98); x.stroke();
   });
 
-  /* diamond — rotated square, 60px across, blue→white→purple (the demo palette) */
+  /* diamond · rotated square, 60px across, blue to white to purple */
   make('diamond', 'Diamond', x => {
-    x.fillStyle = linH([[0, '#3b6cff'], [0.5, '#ffffff'], [1, '#a855f7']]);
+    x.fillStyle = linH(x, [[0, '#3b6cff'], [0.5, '#ffffff'], [1, '#a855f7']]);
     x.beginPath();
     x.moveTo(C, C - 30); x.lineTo(C + 30, C);
     x.lineTo(C, C + 30); x.lineTo(C - 30, C);
     x.closePath(); x.fill();
   });
 
-  /* star — 5-point, 50px outer radius, solid amber */
+  /* star · 5 point, 50px outer radius, amber */
   make('star', 'Star', x => {
-    x.fillStyle = linH([[0, '#ffd23f'], [1, '#ff7a00']]);
+    x.fillStyle = linH(x, [[0, '#ffd23f'], [1, '#ff7a00']]);
     const outer = 50, inner = 21;
     x.beginPath();
     for (let i = 0; i < 10; i++) {
@@ -80,7 +84,7 @@ Forge.StarterTips = (function () {
     x.closePath(); x.fill();
   });
 
-  /* circle — hard center, fades to 0 opacity at 60px radius; teal→pink tint */
+  /* circle · soft center fading to 0 opacity at 60px radius, teal to pink */
   make('circle', 'Soft Circle', x => {
     x.fillStyle = linH(x, [[0, '#22d3ee'], [1, '#e879f9']]);
     x.beginPath(); x.arc(C, C, 60, 0, Math.PI * 2); x.fill();
@@ -94,14 +98,14 @@ Forge.StarterTips = (function () {
     x.globalCompositeOperation = 'source-over';
   });
 
-  /* cross — two 8px-thick bars, 60px long, brand lime */
+  /* cross · two 8px thick bars, 60px long, brand lime */
   make('cross', 'Cross Mark', x => {
     x.fillStyle = '#c8ff00';
     x.fillRect(C - 30, C - 4, 60, 8);
     x.fillRect(C - 4, C - 30, 8, 60);
   });
 
-  /* blob — organic closed bezier, ~70px across, indigo→magenta */
+  /* blob · organic closed bezier, roughly 70px across, indigo to magenta */
   make('blob', 'Ink Blob', x => {
     const radii = [34, 28, 36, 27, 33, 30, 35, 26];
     const n = radii.length;
@@ -114,7 +118,7 @@ Forge.StarterTips = (function () {
     g.addColorStop(1, '#d946ef');
     x.fillStyle = g;
     x.beginPath();
-    let mx = (pts[n - 1][0] + pts[0][0]) / 2, my = (pts[n - 1][1] + pts[0][1]) / 2;
+    const mx = (pts[n - 1][0] + pts[0][0]) / 2, my = (pts[n - 1][1] + pts[0][1]) / 2;
     x.moveTo(mx, my);
     for (let i = 0; i < n; i++) {
       const p = pts[i], q = pts[(i + 1) % n];
@@ -123,7 +127,7 @@ Forge.StarterTips = (function () {
     x.closePath(); x.fill();
   });
 
-  /* crystal — 6 thin lines radiating from center, with small snowflake branches */
+  /* crystal · six thin lines radiating from center, small snowflake branches */
   make('crystal', 'Crystal', x => {
     x.strokeStyle = '#cfe8ff';
     x.lineCap = 'round';

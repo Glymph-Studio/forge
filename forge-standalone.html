@@ -1,0 +1,2155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>forge · turn images into brushes</title>
+<meta name="description" content="Turn any image into a digital brush. Paint with its colors, test it live, export to GIMP and Krita.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23ffd66e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Comic%20Sans%20MS,cursive'%20font-size='19'%20font-weight='bold'%20fill='%234a4136'%20text-anchor='middle'%3Ef%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   forge · style.css
+   soft crayon on paper. rounded, wobbly, friendly.
+   ============================================================ */
+
+:root{
+  --paper:  #fdf9f0;
+  --panel:  #fffdf7;
+  --line:   #eadfcb;
+  --line2:  #e0d3ba;
+  --ink:    #4a4136;
+  --muted:  #a89e8d;
+
+  --red:    #ff8b8b;
+  --orange: #ffb264;
+  --yellow: #ffd66e;
+  --green:  #8fd694;
+  --blue:   #7cc3f7;
+  --purple: #b79cf5;
+  --pink:   #f7a8c3;
+
+  --radius: 14px;
+  --shadow: 0 2px 12px rgba(74, 65, 54, .07);
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+html{ height:100%; }
+
+body{
+  min-height:100%;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Nunito', ui-rounded, system-ui, -apple-system, sans-serif;
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+
+button{ font-family:inherit; background:none; border:none; color:inherit; cursor:pointer; }
+input{ font-family:inherit; color:inherit; }
+
+:focus-visible{ outline:2px dashed var(--red); outline-offset:2px; }
+
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:8px; border:2px solid var(--paper); }
+::-webkit-scrollbar-thumb:hover{ background:var(--yellow); }
+
+/* ~~~~~~~~~~~~~~~~ layout ~~~~~~~~~~~~~~~~ */
+
+.app{
+  display:flex;
+  height:100vh;
+  overflow:hidden;
+}
+
+.panel{ background:var(--panel); overflow-y:auto; }
+
+.panel.left{
+  flex:0 0 272px;
+  padding:20px 18px;
+  display:flex; flex-direction:column; gap:16px;
+  border-right:2px solid var(--line);
+}
+
+.panel.mid{
+  flex:0 0 312px;
+  padding:20px 18px 28px;
+  border-right:2px solid var(--line);
+}
+
+.panel.right{ flex:1; min-width:280px; overflow:hidden; padding:0; }
+
+/* ~~~~~~~~~~~~~~~~ splitter (drag to resize canvas) ~~~~~~~~~~~~~~~~ */
+
+.splitter{
+  flex:0 0 12px;
+  cursor:col-resize;
+  background:var(--paper);
+  display:flex; align-items:center; justify-content:center;
+  touch-action:none;
+  z-index:5;
+}
+.splitter span{
+  width:5px; height:52px; border-radius:99px;
+  background:var(--line2);
+  transition:background .15s, height .15s;
+}
+.splitter:hover span, .splitter.dragging span{ background:var(--orange); height:74px; }
+body.col-dragging{ cursor:col-resize; user-select:none; -webkit-user-select:none; }
+
+/* ~~~~~~~~~~~~~~~~ wordmark ~~~~~~~~~~~~~~~~ */
+
+.wordmark{
+  font-family:'Caveat', 'Comic Sans MS', cursive;
+  font-weight:700;
+  font-size:42px;
+  line-height:1;
+  color:var(--ink);
+  padding-bottom:10px;
+}
+.squiggle{ display:block; width:110px; height:10px; margin-top:2px; }
+
+/* ~~~~~~~~~~~~~~~~ section labels ~~~~~~~~~~~~~~~~ */
+
+.section-label{
+  display:flex; align-items:center; gap:8px;
+  font-size:11px; font-weight:800;
+  letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted);
+  margin:6px 0 10px;
+}
+.section-label::before{
+  content:"";
+  width:11px; height:11px; border-radius:50%;
+  border:2.5px solid rgba(74,65,54,.18);
+  flex:none;
+}
+.dot-yellow::before{ background:var(--yellow); }
+.dot-green::before{ background:var(--green); }
+.dot-red::before{ background:var(--red); }
+.dot-blue::before{ background:var(--blue); }
+.dot-purple::before{ background:var(--purple); }
+.dot-pink::before{ background:var(--pink); }
+.dot-orange::before{ background:var(--orange); }
+
+/* ~~~~~~~~~~~~~~~~ upload zone ~~~~~~~~~~~~~~~~ */
+
+.upload-zone{
+  border:2px dashed var(--line2);
+  border-radius:var(--radius);
+  background:#fffef9;
+  padding:18px 12px;
+  text-align:center;
+  cursor:pointer;
+  transition:border-color .15s, background .15s, transform .15s;
+}
+.upload-zone:hover{ border-color:var(--orange); background:#fff7ec; }
+.upload-zone.dragover{ border-color:var(--red); background:#fff1ea; transform:scale(1.015); }
+.uz-title{ display:block; font-weight:800; font-size:14px; }
+.uz-sub{ display:block; font-size:10.5px; font-weight:600; color:var(--muted); margin-top:6px; line-height:1.7; }
+
+/* ~~~~~~~~~~~~~~~~ tip preview ~~~~~~~~~~~~~~~~ */
+
+.preview-block{ text-align:center; }
+.tip-preview{
+  width:64px; height:64px; margin:0 auto;
+  border:2px solid var(--line);
+  border-radius:16px;
+  background:repeating-conic-gradient(#f6efe0 0% 25%, #fffdf7 0% 50%) 0 0 / 14px 14px;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  box-shadow:var(--shadow);
+}
+.tip-preview img{ width:100%; height:100%; object-fit:contain; }
+.tip-name{ font-size:10.5px; font-weight:700; color:var(--muted); margin-top:7px; }
+
+/* ~~~~~~~~~~~~~~~~ starter tips ~~~~~~~~~~~~~~~~ */
+
+.tips-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.tip-thumb{
+  border:2px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  padding:0;
+  aspect-ratio:1;
+  overflow:hidden;
+  transition:transform .15s, border-color .15s, box-shadow .15s;
+}
+.tip-thumb img{ width:100%; height:100%; display:block; pointer-events:none; }
+.tip-thumb:hover{ transform:rotate(-3deg) scale(1.06); box-shadow:var(--shadow); }
+.tip-thumb:nth-child(8n+1):hover{ border-color:var(--red); }
+.tip-thumb:nth-child(8n+2):hover{ border-color:var(--orange); }
+.tip-thumb:nth-child(8n+3):hover{ border-color:var(--yellow); }
+.tip-thumb:nth-child(8n+4):hover{ border-color:var(--green); }
+.tip-thumb:nth-child(8n+5):hover{ border-color:var(--blue); }
+.tip-thumb:nth-child(8n+6):hover{ border-color:var(--purple); }
+.tip-thumb:nth-child(8n+7):hover{ border-color:var(--pink); }
+.tip-thumb:nth-child(8n+8):hover{ border-color:var(--red); }
+.tip-thumb:active{ cursor:grabbing; transform:scale(.96); }
+
+/* ~~~~~~~~~~~~~~~~ saved brushes ~~~~~~~~~~~~~~~~ */
+
+.saved-list{ display:flex; flex-direction:column; gap:7px; }
+.saved-list .empty{
+  border:2px dashed var(--line);
+  border-radius:var(--radius);
+  padding:14px 10px;
+  text-align:center;
+  font-size:11px; font-weight:700; color:var(--muted);
+}
+.saved-row{
+  display:flex; align-items:center; gap:4px;
+  background:#fff;
+  border:2px solid var(--line);
+  border-radius:12px;
+  padding:7px 9px;
+}
+.saved-row .name{
+  flex:1; font-size:12px; font-weight:700;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.icon-btn{ color:var(--muted); font-size:14px; line-height:1; padding:2px 4px; border-radius:6px; transition:color .15s; }
+.icon-btn:hover{ color:var(--blue); }
+.icon-btn svg{ display:block; }
+
+/* ~~~~~~~~~~~~~~~~ credit ~~~~~~~~~~~~~~~~ */
+
+.credit{
+  margin-top:auto; padding-top:14px;
+  font-size:11.5px; font-weight:700; color:var(--muted);
+}
+.credit a{ color:var(--ink); text-decoration:underline wavy var(--blue) 1.5px; text-underline-offset:3px; }
+.credit a:hover{ color:var(--blue); }
+
+/* ~~~~~~~~~~~~~~~~ sliders ~~~~~~~~~~~~~~~~ */
+
+.group{ margin-bottom:6px; }
+.row{ margin-bottom:14px; }
+.row-top{
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:12px; font-weight:800; color:var(--ink);
+  margin-bottom:6px;
+}
+.row-top .val{
+  font-size:11px; font-weight:800; color:var(--muted);
+  background:var(--paper);
+  border-radius:99px;
+  padding:2px 9px;
+}
+
+input[type=range]{
+  -webkit-appearance:none; appearance:none;
+  width:100%; height:18px;
+  background:transparent; cursor:pointer;
+  --fill:50%;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:6px; border-radius:99px;
+  background:linear-gradient(to right, var(--orange) var(--fill), #f0e7d3 var(--fill));
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none;
+  width:18px; height:18px; border-radius:50%;
+  background:#fff;
+  border:3px solid var(--orange);
+  box-shadow:0 1px 4px rgba(74,65,54,.18);
+  margin-top:-6px;
+  transition:transform .1s;
+}
+input[type=range]::-webkit-slider-thumb:hover{ transform:scale(1.15); }
+input[type=range]::-moz-range-track{ height:6px; border-radius:99px; background:#f0e7d3; }
+input[type=range]::-moz-range-progress{ height:6px; border-radius:99px; background:var(--orange); }
+input[type=range]::-moz-range-thumb{
+  width:14px; height:14px; border-radius:50%;
+  background:#fff; border:3px solid var(--orange);
+  box-shadow:0 1px 4px rgba(74,65,54,.18);
+}
+input[type=range]:disabled{ opacity:.4; cursor:default; }
+
+.mini-toggle{
+  font-size:10px; font-weight:800;
+  color:var(--muted);
+  border:2px solid var(--line);
+  border-radius:99px;
+  padding:2px 10px;
+  transition:all .15s;
+}
+.mini-toggle:hover{ border-color:var(--orange); color:var(--ink); }
+.mini-toggle.active{ color:#fff; background:var(--orange); border-color:var(--orange); }
+
+/* ~~~~~~~~~~~~~~~~ segmented controls ~~~~~~~~~~~~~~~~ */
+
+.mode-seg{
+  display:flex; gap:6px;
+  background:var(--paper);
+  border-radius:99px;
+  padding:5px;
+  margin-bottom:16px;
+}
+.mode-seg button{
+  flex:1; padding:9px 0;
+  font-size:13px; font-weight:800;
+  color:var(--muted);
+  border-radius:99px;
+  transition:all .15s;
+}
+.mode-seg button.active[data-mode-btn="stamp"]{ background:var(--red); color:#fff; box-shadow:0 2px 8px rgba(255,139,139,.45); }
+.mode-seg button.active[data-mode-btn="flow"]{ background:var(--blue); color:#fff; box-shadow:0 2px 8px rgba(124,195,247,.45); }
+.mode-seg button:not(.active):hover{ color:var(--ink); }
+
+.seg{ display:flex; gap:6px; background:var(--paper); border-radius:99px; padding:5px; margin-bottom:12px; }
+.seg button{
+  flex:1; padding:8px 0;
+  font-size:12px; font-weight:800;
+  color:var(--muted); border-radius:99px;
+  transition:all .15s;
+}
+.seg button.active{ background:var(--purple); color:#fff; box-shadow:0 2px 8px rgba(183,156,245,.45); }
+.seg button:not(.active):hover{ color:var(--ink); }
+
+.mode-seg.mini{ margin:0; padding:3px; gap:3px; }
+.mode-seg.mini button{ padding:6px 12px; font-size:11.5px; flex:none; }
+.bar-spacer{ flex:1; }
+
+/* ~~~~~~~~~~~~~~~~ buttons ~~~~~~~~~~~~~~~~ */
+
+.btn{
+  display:block; width:100%;
+  background:#fff;
+  border:2px solid var(--line);
+  border-radius:var(--radius);
+  color:var(--ink);
+  font-size:12.5px; font-weight:800;
+  padding:11px 12px;
+  margin-bottom:9px;
+  text-align:center;
+  box-shadow:var(--shadow);
+  transition:transform .12s, border-color .15s, background .15s;
+}
+.btn:hover{ transform:translateY(-1px); border-color:var(--yellow); background:#fffbee; }
+.btn:active{ transform:translateY(0) scale(.985); }
+.btn.primary{
+  background:var(--blue);
+  border-color:var(--blue);
+  color:#fff;
+  box-shadow:0 3px 12px rgba(124,195,247,.5);
+}
+.btn.primary:hover{ background:#5db4f5; border-color:#5db4f5; }
+
+/* ~~~~~~~~~~~~~~~~ flow palette strip ~~~~~~~~~~~~~~~~ */
+
+.palette-wrap{ margin-bottom:14px; }
+.palette-strip{
+  display:block; width:100%; height:14px;
+  border-radius:99px;
+  border:2px solid var(--line);
+}
+.palette-hint{ font-size:10.5px; font-weight:600; color:var(--muted); margin-top:7px; line-height:1.6; }
+
+/* ~~~~~~~~~~~~~~~~ canvas ~~~~~~~~~~~~~~~~ */
+
+.canvas-wrap{ position:relative; width:100%; height:100%; background:#ffffff; overflow:hidden; }
+.canvas-wrap canvas{
+  position:absolute; inset:0; width:100%; height:100%;
+  touch-action:none;
+  cursor:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='21'%20height='21'%3E%3Cpath%20d='M10.5%200v6.5M10.5%2014.5V21M0%2010.5h6.5M14.5%2010.5H21'%20stroke='%234a4136'%20stroke-width='1.4'%20stroke-linecap='round'/%3E%3Ccircle%20cx='10.5'%20cy='10.5'%20r='1.1'%20fill='%23ff8b8b'/%3E%3C/svg%3E") 10 10, crosshair;
+}
+
+.brush-ring{
+  position:absolute;
+  border:2px solid var(--blue);
+  border-radius:50%;
+  pointer-events:none;
+  display:none;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 0 2px rgba(255,255,255,.55), inset 0 0 0 1px rgba(255,255,255,.55);
+  z-index:3;
+}
+
+.canvas-topbar{
+  position:absolute; top:12px; right:12px; left:12px;
+  display:flex; align-items:center; gap:8px;
+  flex-wrap:wrap;
+  z-index:5;
+  pointer-events:none;
+}
+.canvas-topbar > *{ pointer-events:auto; }
+
+.tbtn{
+  display:flex; align-items:center; gap:7px; position:relative;
+  background:#fff;
+  border:2px solid var(--line);
+  border-radius:99px;
+  color:var(--ink);
+  font-size:12px; font-weight:800;
+  padding:7px 13px;
+  box-shadow:var(--shadow);
+  transition:transform .12s, border-color .15s;
+}
+.tbtn:hover{ transform:translateY(-1px); border-color:var(--green); }
+.tbtn .swatch{
+  width:13px; height:13px;
+  border-radius:5px;
+  border:2px solid #fff;
+  box-shadow:0 0 0 1.5px var(--line2);
+  display:inline-block; background:#fff;
+}
+.tbtn input[type=color]{
+  position:absolute; left:0; top:0; width:1px; height:1px;
+  opacity:0; pointer-events:none; border:0; padding:0;
+}
+
+.toast{
+  position:absolute; bottom:16px; left:50%;
+  transform:translateX(-50%) translateY(4px);
+  background:#e8f6e8;
+  border:2px solid var(--green);
+  color:#2f6b39;
+  font-size:12px; font-weight:800;
+  padding:9px 18px;
+  border-radius:99px;
+  box-shadow:var(--shadow);
+  opacity:0;
+  transition:opacity .25s, transform .25s;
+  pointer-events:none;
+  z-index:6;
+  white-space:nowrap; max-width:92%;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ~~~~~~~~~~~~~~~~ share modal ~~~~~~~~~~~~~~~~ */
+
+.modal-overlay{
+  display:none; position:fixed; inset:0;
+  background:rgba(74,65,54,.35);
+  z-index:60;
+  align-items:center; justify-content:center;
+  padding:16px;
+}
+.modal-overlay.open{ display:flex; }
+.modal{
+  width:560px; max-width:100%;
+  background:var(--panel);
+  border:2px solid var(--line);
+  border-radius:20px;
+  padding:24px;
+  box-shadow:0 18px 60px rgba(74,65,54,.25);
+}
+.modal-title{
+  font-family:'Caveat','Comic Sans MS',cursive;
+  font-size:30px; font-weight:700;
+  margin-bottom:12px;
+}
+.modal input{
+  width:100%;
+  background:var(--paper);
+  border:2px solid var(--line);
+  border-radius:12px;
+  font-size:12px; font-weight:600;
+  padding:11px 12px;
+  user-select:all;
+}
+.modal-hint{ font-size:11.5px; font-weight:600; color:var(--muted); margin-top:10px; line-height:1.7; }
+.modal-actions{ display:flex; gap:9px; margin-top:14px; }
+.modal-actions .btn{ margin-bottom:0; }
+
+/* ~~~~~~~~~~~~~~~~ boot warning ~~~~~~~~~~~~~~~~ */
+
+.boot-warning{
+  display:none;
+  position:fixed; left:50%; bottom:18px;
+  transform:translateX(-50%);
+  width:min(520px, calc(100vw - 32px));
+  background:#fff4e5;
+  border:2px solid var(--orange);
+  border-radius:16px;
+  color:#7a5230;
+  font-size:12.5px; font-weight:700;
+  line-height:1.7;
+  padding:14px 18px;
+  z-index:100;
+  box-shadow:0 10px 30px rgba(74,65,54,.2);
+}
+
+/* ~~~~~~~~~~~~~~~~ mode / symmetry visibility ~~~~~~~~~~~~~~~~ */
+
+.only-flow, .only-radial{ display:none; }
+body[data-mode="flow"]  .only-stamp{ display:none; }
+body[data-mode="flow"]  .only-flow{ display:block; }
+body[data-sym="radial"] .only-radial{ display:block; }
+
+.mode-seg.desktop-only{ display:flex; }
+.mode-seg.mini{ display:none; }
+
+/* ~~~~~~~~~~~~~~~~ phone + tablet ~~~~~~~~~~~~~~~~ */
+
+@media (max-width: 960px){
+
+  html, body{ overflow:auto; height:auto; }
+
+  .app{
+    display:flex; flex-direction:column;
+    height:auto; overflow:visible;
+  }
+
+  /* canvas first, sticky, always reachable */
+  .panel.right{
+    order:1;
+    position:sticky; top:0;
+    height:54vh; min-height:320px;
+    z-index:20;
+    border-bottom:2px solid var(--line);
+    background:var(--panel);
+  }
+  .splitter{ display:none; }
+  .panel.left{ order:2; flex:none; width:auto; border-right:none; }
+  .panel.mid{ order:3; flex:none; width:auto; border-right:none; border-top:2px solid var(--line); }
+
+  .wordmark{ font-size:34px; padding-bottom:8px; }
+  .credit{ margin-top:6px; padding:18px 0 6px; }
+
+  .mode-seg.mini{ display:flex; }
+
+  .tips-grid{ grid-template-columns:repeat(8, 1fr); }
+  .tips-grid .tip-thumb:nth-child(n+9){ display:none; }
+
+  .canvas-topbar{ left:10px; right:10px; top:10px; gap:6px; }
+  .tbtn{ padding:6px 11px; font-size:11.5px; }
+  .mode-seg.mini button{ padding:5px 10px; font-size:11px; }
+}
+
+@media (max-width: 480px){
+  .tips-grid{ grid-template-columns:repeat(4, 1fr); }
+  .tips-grid .tip-thumb:nth-child(n+9){ display:block; }
+  .tbtn{ padding:6px 9px; }
+  .tbtn .swatch{ width:11px; height:11px; }
+}
+
+/* phones: sticky canvas + scrolling tools underneath.
+   drag from the little handle between the panels to make
+   the canvas wider or narrower on desktop. */
+/
+
+</style>
+</head>
+<body data-mode="stamp" data-sym="off">
+
+<div class="app" id="app">
+
+  <!-- ~~~~~~~~~~ left: source material ~~~~~~~~~~ -->
+  <aside class="panel left">
+    <header class="wordmark">
+      forge
+      <svg class="squiggle" viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6 Q 12 1, 24 5 T 46 5 T 68 5 T 90 5 T 118 4" fill="none" stroke="var(--red)" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </header>
+
+    <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Upload brush tip image">
+      <span class="uz-title">Upload brush tip</span>
+      <span class="uz-sub">PNG · JPG · SVG<br>click or drop, or tap a starter tip</span>
+    </div>
+    <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" hidden>
+
+    <div class="preview-block">
+      <div class="tip-preview"><img id="tipPreviewImg" alt="brush tip preview"></div>
+      <div class="tip-name" id="tipNameLabel">no tip yet</div>
+    </div>
+
+    <div class="section-label dot-yellow">Starter tips</div>
+    <div class="tips-grid" id="tipsGrid"></div>
+
+    <div class="section-label dot-green">Saved brushes</div>
+    <div class="saved-list" id="savedList"></div>
+
+    <footer class="credit">
+      made with <span aria-hidden="true">🖍️</span> by
+      <a href="https://github.com/Glymph-Studio" target="_blank" rel="noopener">Glymph Studio</a>
+    </footer>
+  </aside>
+
+  <!-- ~~~~~~~~~~ middle: brush settings ~~~~~~~~~~ -->
+  <section class="panel mid">
+    <div class="mode-seg" role="group" aria-label="Brush mode">
+      <button data-mode-btn="stamp" class="active">Stamp</button>
+      <button data-mode-btn="flow">Flow</button>
+    </div>
+
+    <div class="section-label dot-red only-stamp">Stamp engine</div>
+    <div id="groupStamp" class="group only-stamp"></div>
+
+    <div class="only-flow">
+      <div class="section-label dot-blue">Flow engine</div>
+      <div class="palette-wrap">
+        <canvas id="paletteStrip" class="palette-strip" width="256" height="12"></canvas>
+        <div class="palette-hint">colors from your tip, in order, smeared as you draw</div>
+      </div>
+      <div id="groupFlow" class="group"></div>
+    </div>
+
+    <div class="section-label dot-purple">Shared</div>
+    <div id="groupShared" class="group"></div>
+
+    <div class="section-label dot-pink">Symmetry</div>
+    <div class="seg sym-seg" role="group" aria-label="Symmetry">
+      <button data-sym="off" class="active">Off</button>
+      <button data-sym="mirror">Mirror</button>
+      <button data-sym="radial">Radial</button>
+    </div>
+    <div id="groupRadial" class="group only-radial"></div>
+
+    <div class="section-label dot-orange">Export</div>
+    <button class="btn" id="exportTipPng">Export tip PNG</button>
+    <button class="btn" id="exportGbr">Export .GBR (GIMP)</button>
+    <button class="btn" id="exportKpp">Export .KPP (Krita)</button>
+    <button class="btn" id="exportCanvasPng">Export canvas PNG</button>
+
+    <button class="btn primary" id="shareBtn">Share this brush ↗</button>
+  </section>
+
+  <!-- ~~~~~~~~~~ drag to resize the canvas ~~~~~~~~~~ -->
+  <div class="splitter" id="splitter" title="Drag to resize the canvas" aria-hidden="true"><span></span></div>
+
+  <!-- ~~~~~~~~~~ right: the canvas ~~~~~~~~~~ -->
+  <section class="panel right" id="canvasPanel">
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="canvas"></canvas>
+      <div class="brush-ring" id="brushRing"></div>
+
+      <div class="canvas-topbar">
+        <div class="mode-seg mini" role="group" aria-label="Brush mode">
+          <button data-mode-btn="stamp" class="active">Stamp</button>
+          <button data-mode-btn="flow">Flow</button>
+        </div>
+        <span class="bar-spacer"></span>
+        <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
+        <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+        <label class="tbtn" title="Stamp tint color">
+          Color<span class="swatch" id="colorSwatch"></span>
+          <input type="color" id="colorInput" value="#ffffff">
+        </label>
+        <label class="tbtn" title="Canvas background">
+          BG<span class="swatch" id="bgSwatch"></span>
+          <input type="color" id="bgInput" value="#ffffff">
+        </label>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ~~~~~~~~~~ share modal ~~~~~~~~~~ -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <div class="modal-title">Share this brush</div>
+    <input type="text" id="shareUrlInput" readonly spellcheck="false">
+    <div class="modal-hint">The whole brush, tip image and settings included, lives inside this link. Anyone who opens it gets your brush. No account, no upload.</div>
+    <div class="modal-actions">
+      <button class="btn primary" id="shareCopyBtn">Copy link</button>
+      <button class="btn" id="shareCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- shown only if the scripts below fail to load (sandboxed previews block them) -->
+<div class="boot-warning" id="bootWarning">
+  forge could not fully load here. If you are viewing a locked preview, download the
+  folder and open <b>index.html</b> in your browser, or serve it with
+  <b>python3 -m http.server</b>.
+</div>
+<noscript>
+  <div class="boot-warning">forge needs JavaScript to draw. Please enable it and reload.</div>
+</noscript>
+
+<script>
+window.__forgeError = null;
+window.addEventListener('error', function (e) {
+  if (!window.__forgeError) {
+    window.__forgeError = (e.message || 'unknown error') +
+      (e.filename ? '  (' + e.filename.split('/').pop() + ':' + (e.lineno || '?') + ')' : '');
+  }
+});
+</script>
+<script>
+/* ~~~ js/state.js ~~~ */
+/* ============================================================
+   forge · state.js · shared state + tiny helpers
+   ============================================================ */
+
+window.Forge = window.Forge || {};
+
+Forge.state = {
+  mode: 'stamp',
+
+  // stamp engine
+  spacing: 0.25,        // ratio of tip size
+  size: 90,             // px
+  sizeJitter: 0.25,     // 0 to 1
+  scatter: 0,           // px (stamp)
+  rotation: 0,          // degrees
+  rotationRandom: false,
+  opacity: 1.0,
+  count: 1,
+
+  // flow engine
+  flowSize: 64,         // px (smear dot size)
+  flowSpeed: 1.0,       // color cycle speed per px traveled
+  smoothing: 0.85,      // lerp between sampled colors
+  flowScatter: 0,       // px (flow)
+  flowOpacity: 0.9,
+
+  // shared
+  pressureSens: 0.5,    // how much speed affects size and opacity
+  symmetryMode: 'off',  // off | mirror | radial
+  symmetryCount: 6,
+
+  // runtime
+  color: '#ffffff',     // stamp tint (multiply)
+  bg: '#ffffff',        // paper white
+  tipName: 'diamond',
+  tipCanvas: null,      // normalized 256x256 canvas
+  MAX_SPEED: 3.0        // px/ms treated as full speed
+};
+
+Forge.clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+Forge.lerp  = (a, b, t) => a + (b - a) * t;
+
+Forge.slug = s =>
+  String(s || 'brush').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'brush';
+
+</script>
+<script>
+/* ~~~ js/starter-tips.js ~~~ */
+/* ============================================================
+   forge · starter-tips.js · eight tips drawn in code
+   Each is a 128x128 canvas. Colors are laid out so Flow mode has
+   interesting palettes out of the box.
+   ============================================================ */
+
+Forge.StarterTips = (function () {
+  const S = 128, C = 64;
+  const tips = [];
+
+  function make(id, name, draw) {
+    const c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    const x = c.getContext('2d');
+    draw(x);
+    tips.push({ id, name, canvas: c });
+  }
+
+  function linH(x, stops) {
+    if (!x || typeof x.createLinearGradient !== 'function') {
+      console.warn('linH got a bad context, using a flat color instead');
+      return '#ffd66e';
+    }
+    const grad = x.createLinearGradient(0, 0, S, 0);
+    for (const [o, col] of stops) grad.addColorStop(o, col);
+    return grad;
+  }
+
+  /* splat · 20 to 35 random circles (r 2 to 15) within 60px of center, half opacity.
+     Hue follows x-position so the flow palette sweeps through the spectrum. */
+  make('splat', 'Splatter', x => {
+    const n = 20 + Math.floor(Math.random() * 16);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.random() * 60;
+      const px = C + Math.cos(a) * rr;
+      const py = C + Math.sin(a) * rr;
+      x.globalAlpha = 0.5;
+      x.fillStyle = `hsl(${Math.round((px / S) * 320)} 85% 60%)`;
+      x.beginPath();
+      x.arc(px, py, 2 + Math.random() * 13, 0, Math.PI * 2);
+      x.fill();
+    }
+    x.globalAlpha = 1;
+  });
+
+  /* leaf · 30x80 ellipse, pointed via beziers, transparency gradient center to edge */
+  make('leaf', 'Leaf', x => {
+    const g = x.createLinearGradient(C - 15, 0, C + 15, 0);
+    g.addColorStop(0,   'rgba(46,160,67,0.55)');
+    g.addColorStop(0.5, 'rgba(130,225,130,0.95)');
+    g.addColorStop(1,   'rgba(20,110,50,0.55)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.moveTo(C, 24);
+    x.bezierCurveTo(C + 16, 40, C + 16, 88, C, 104);
+    x.bezierCurveTo(C - 16, 88, C - 16, 40, C, 24);
+    x.fill();
+    x.strokeStyle = 'rgba(255,255,255,0.25)';
+    x.lineWidth = 1.5;
+    x.beginPath(); x.moveTo(C, 30); x.lineTo(C, 98); x.stroke();
+  });
+
+  /* diamond · rotated square, 60px across, blue to white to purple */
+  make('diamond', 'Diamond', x => {
+    x.fillStyle = linH(x, [[0, '#3b6cff'], [0.5, '#ffffff'], [1, '#a855f7']]);
+    x.beginPath();
+    x.moveTo(C, C - 30); x.lineTo(C + 30, C);
+    x.lineTo(C, C + 30); x.lineTo(C - 30, C);
+    x.closePath(); x.fill();
+  });
+
+  /* star · 5 point, 50px outer radius, amber */
+  make('star', 'Star', x => {
+    x.fillStyle = linH(x, [[0, '#ffd23f'], [1, '#ff7a00']]);
+    const outer = 50, inner = 21;
+    x.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? outer : inner;
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const px = C + Math.cos(a) * r, py = C + Math.sin(a) * r;
+      i === 0 ? x.moveTo(px, py) : x.lineTo(px, py);
+    }
+    x.closePath(); x.fill();
+  });
+
+  /* circle · soft center fading to 0 opacity at 60px radius, teal to pink */
+  make('circle', 'Soft Circle', x => {
+    x.fillStyle = linH(x, [[0, '#22d3ee'], [1, '#e879f9']]);
+    x.beginPath(); x.arc(C, C, 60, 0, Math.PI * 2); x.fill();
+    x.globalCompositeOperation = 'destination-in';
+    const m = x.createRadialGradient(C, C, 18, C, C, 60);
+    m.addColorStop(0, 'rgba(0,0,0,1)');
+    m.addColorStop(0.55, 'rgba(0,0,0,1)');
+    m.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = m;
+    x.beginPath(); x.arc(C, C, 60, 0, Math.PI * 2); x.fill();
+    x.globalCompositeOperation = 'source-over';
+  });
+
+  /* cross · two 8px thick bars, 60px long, brand lime */
+  make('cross', 'Cross Mark', x => {
+    x.fillStyle = '#c8ff00';
+    x.fillRect(C - 30, C - 4, 60, 8);
+    x.fillRect(C - 4, C - 30, 8, 60);
+  });
+
+  /* blob · organic closed bezier, roughly 70px across, indigo to magenta */
+  make('blob', 'Ink Blob', x => {
+    const radii = [34, 28, 36, 27, 33, 30, 35, 26];
+    const n = radii.length;
+    const pts = radii.map((r, i) => {
+      const a = (i / n) * Math.PI * 2;
+      return [C + Math.cos(a) * r, C + Math.sin(a) * r * 0.92];
+    });
+    const g = x.createLinearGradient(C - 30, C - 30, C + 30, C + 30);
+    g.addColorStop(0, '#6d28d9');
+    g.addColorStop(1, '#d946ef');
+    x.fillStyle = g;
+    x.beginPath();
+    const mx = (pts[n - 1][0] + pts[0][0]) / 2, my = (pts[n - 1][1] + pts[0][1]) / 2;
+    x.moveTo(mx, my);
+    for (let i = 0; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      x.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
+    }
+    x.closePath(); x.fill();
+  });
+
+  /* crystal · six thin lines radiating from center, small snowflake branches */
+  make('crystal', 'Crystal', x => {
+    x.strokeStyle = '#cfe8ff';
+    x.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      const dx = Math.cos(a), dy = Math.sin(a);
+      const len = 52;
+      x.lineWidth = 2.5;
+      x.beginPath(); x.moveTo(C, C); x.lineTo(C + dx * len, C + dy * len); x.stroke();
+      x.lineWidth = 1.4;
+      const bx = C + dx * len * 0.6, by = C + dy * len * 0.6;
+      for (const s of [-1, 1]) {
+        const ba = a + s * Math.PI / 4;
+        x.beginPath();
+        x.moveTo(bx, by);
+        x.lineTo(bx + Math.cos(ba) * 12, by + Math.sin(ba) * 12);
+        x.stroke();
+      }
+    }
+    x.fillStyle = '#ffffff';
+    x.beginPath(); x.arc(C, C, 3, 0, Math.PI * 2); x.fill();
+  });
+
+  return {
+    all: () => tips,
+    get: id => tips.find(t => t.id === id)
+  };
+})();
+
+</script>
+<script>
+/* ~~~ js/flow-mode.js ~~~ */
+/* ============================================================
+   FORGE — flow-mode.js — THE HEADLINE FEATURE
+   The image is the palette. Colors are sampled in sequence from
+   the brush tip and smeared along the stroke as you draw — like
+   dragging wet paint made of the image's pigments.
+   ============================================================ */
+
+Forge.Flow = {
+  palette: [],        // [{r,g,b,a}] × 256, in image order
+  strokeDistance: 0,  // total px traveled since stroke began
+  traveled: 0,        // sub-px accumulator (one dot per px)
+
+  /* ----------------------------------------------------------
+     4.1 — Color sampling (runs once on image load / mode switch)
+     Scan horizontally across the vertical center of the image.
+     If a sample lands on transparency, hunt up/down that column
+     for the nearest opaque pixel so wide/tall images still give
+     a full-bleed palette. Falls back to a grid scan, then to a
+     built-in gradient so Flow mode NEVER strobes out empty.
+     ---------------------------------------------------------- */
+  samplePalette(tipCanvas) {
+    const w = tipCanvas.width, h = tipCanvas.height;
+    const data = tipCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+    const N = 256, y = (h / 2) | 0;
+    const out = [];
+
+    for (let i = 0; i < N; i++) {
+      const x = Math.min(w - 1, Math.floor((i / N) * w));
+      const c = this._pickOpaque(data, w, h, x, y);
+      if (c) out.push(c);
+    }
+
+    if (out.length < 16) {
+      // column fallback failed (very sparse tip) → grid scan
+      out.length = 0;
+      const G = 48;
+      for (let gy = 0; gy < G; gy++) {
+        for (let gx = 0; gx < G; gx++) {
+          const x = Math.min(w - 1, Math.floor((gx / G) * w));
+          const yy = Math.min(h - 1, Math.floor((gy / G) * h));
+          const c = this._at(data, w, x, yy);
+          if (c && c.a >= 10) out.push(c);
+        }
+      }
+    }
+
+    if (out.length < 2) {
+      // absolute fallback: lime → white → violet
+      out.length = 0;
+      for (let i = 0; i < 256; i++) {
+        const t = i / 255;
+        let r, g, b;
+        if (t < 0.5) {
+          const k = t * 2;
+          r = Forge.lerp(200, 255, k); g = 255; b = Forge.lerp(0, 255, k);
+        } else {
+          const k = (t - 0.5) * 2;
+          r = Forge.lerp(255, 168, k); g = Forge.lerp(255, 85, k); b = Forge.lerp(255, 247, k);
+        }
+        out.push({ r: Math.round(r), g: Math.round(g), b: Math.round(b), a: 255 });
+      }
+    }
+
+    this.palette = out;
+    return out;
+  },
+
+  _at(data, w, x, y) {
+    const i = (y * w + x) * 4;
+    return { r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] };
+  },
+
+  _pickOpaque(data, w, h, x, y) {
+    let c = this._at(data, w, x, y);
+    if (c.a >= 10) return c;
+    const maxR = (h / 2) | 0;
+    for (let r = 1; r <= maxR; r++) {
+      if (y - r >= 0) { c = this._at(data, w, x, y - r); if (c.a >= 10) return c; }
+      if (y + r <  h) { c = this._at(data, w, x, y + r); if (c.a >= 10) return c; }
+    }
+    return null;
+  },
+
+  resetStroke() {
+    this.strokeDistance = 0;
+    this.traveled = 0;
+  },
+
+  /* Color at a given distance along the stroke.
+     paletteT = (strokeDistance * flowSpeed) % palette.length
+     Smoothing lerps between adjacent palette entries — without it
+     the stroke strobes; with it you get a wet-paint gradient. */
+  colorAt(sd) {
+    const S = Forge.state, pal = this.palette;
+    if (!pal.length) return { r: 255, g: 255, b: 255, a: 255 };
+    const paletteT = (sd * S.flowSpeed) % pal.length;
+    const i0 = Math.floor(paletteT);
+    const i1 = (i0 + 1) % pal.length;
+    const t = paletteT - i0;
+    const k = S.smoothing * t;                 // smoothing × t
+    const a = pal[i0], b = pal[i1];
+    return {
+      r: Math.round(Forge.lerp(a.r, b.r, k)),
+      g: Math.round(Forge.lerp(a.g, b.g, k)),
+      b: Math.round(Forge.lerp(a.b, b.b, k)),
+      a: Forge.lerp(a.a, b.a, k)
+    };
+  },
+
+  /* ----------------------------------------------------------
+     4.2 — Drawing loop. Advances along the segment one px at a
+     time, drawing a soft radial dot at the interpolated position
+     with the palette color at that exact distance. `wrapper`
+     re-draws each dot under every symmetry transform.
+     ---------------------------------------------------------- */
+  step(from, to, wrapper) {
+    const seg = Math.hypot(to.x - from.x, to.y - from.y);
+    if (seg <= 0 || !this.palette.length) return;
+
+    this.traveled += seg;
+    let consumed = 0;
+
+    while (this.traveled >= 1) {
+      this.traveled -= 1;
+      consumed += 1;
+
+      const cc = Math.min(consumed, seg);
+      const t = cc / seg;
+      const pos = {
+        x: from.x + (to.x - from.x) * t,
+        y: from.y + (to.y - from.y) * t
+      };
+      const col = this.colorAt(this.strokeDistance + consumed);
+      const ctx = Forge.Engine.context();
+      wrapper(() => this.drawDot(ctx, pos, col));
+
+      if (consumed >= seg) break; // remainder carries into next segment
+    }
+
+    this.strokeDistance += seg;
+  },
+
+  /* Soft round smear dot — hard color center bleeding to nothing. */
+  drawDot(ctx, pos, color) {
+    const S = Forge.state;
+    const pressure = Forge.Engine.pressure();
+    const r = (S.flowSize / 2) * pressure;
+    if (r < 0.4) return;
+
+    const ox = (Math.random() * 2 - 1) * S.flowScatter;
+    const oy = (Math.random() * 2 - 1) * S.flowScatter;
+    const x = pos.x + ox, y = pos.y + oy;
+    const alpha = Forge.clamp(S.flowOpacity * (color.a / 255), 0, 1);
+
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(${color.r},${color.g},${color.b},${alpha})`);
+    grad.addColorStop(1, `rgba(${color.r},${color.g},${color.b},0)`);
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+};
+
+</script>
+<script>
+/* ~~~ js/brush-engine.js ~~~ */
+/* ============================================================
+   FORGE — brush-engine.js
+   Canvas manager · STAMP engine · symmetry · undo · pointer I/O
+   Pointer Events only (mouse / touch / stylus).
+   ============================================================ */
+
+Forge.Engine = (function () {
+  const S = () => Forge.state;
+  const clamp = Forge.clamp;
+
+  let canvas, ctx, wrap, ring;
+  let dpr = 1, cssW = 0, cssH = 0;
+  let drawing = false;
+  let lastPos = null;        // last pointer position (css px)
+  let lastPointer = null;    // for the ring, even when not drawing
+  let spacingCarry = 0;      // px left until the next stamp
+  let speed = 0;             // smoothed pointer speed, px/ms
+  let lastMoveTime = 0;
+  let history = [];
+  const MAX_HISTORY = 20;
+  const tinted = document.createElement('canvas'); // color-multiplied tip
+  let tintedValid = false;
+  let ready = false;
+
+  /* ---------------- setup ---------------- */
+
+  function attach(canvasEl, wrapEl, ringEl) {
+    canvas = canvasEl; wrap = wrapEl; ring = ringEl;
+    ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onUp);
+    canvas.addEventListener('pointerenter', () => { if (lastPointer) placeRing(lastPointer); });
+    canvas.addEventListener('pointerleave', () => { if (ring) ring.style.display = 'none'; });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
+    window.addEventListener('resize', resize);
+
+    resize();
+    ready = true;
+  }
+
+  function resize() {
+    if (!wrap || !canvas) return;
+    const r = wrap.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(r.width));
+    const h = Math.max(1, Math.floor(r.height));
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+
+    // preserve existing art across resizes
+    let prev = null;
+    if (canvas.width > 1 && canvas.height > 1) {
+      prev = document.createElement('canvas');
+      prev.width = canvas.width; prev.height = canvas.height;
+      prev.getContext('2d').drawImage(canvas, 0, 0);
+    }
+
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    cssW = w; cssH = h;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (prev) ctx.drawImage(prev, 0, 0, w, h);
+  }
+
+  /* ---------------- pointer I/O ---------------- */
+
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function onDown(e) {
+    if (!e.isPrimary) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+
+    const p = pos(e);
+    lastPointer = p; placeRing(p);
+    drawing = true;
+    lastPos = p;
+    speed = 0;
+    lastMoveTime = e.timeStamp;
+    pushHistory(); // pre-stroke snapshot
+
+    if (S().mode === 'stamp') {
+      stampAt(p);
+      spacingCarry = stampSpacing();
+    } else {
+      Forge.Flow.resetStroke();
+      withSymmetry(() => Forge.Flow.drawDot(ctx, p, Forge.Flow.colorAt(0)));
+    }
+  }
+
+  function onMove(e) {
+    const p = pos(e);
+    lastPointer = p; placeRing(p);
+    if (!drawing) return;
+
+    const dt = Math.max(1, e.timeStamp - lastMoveTime);
+    const d = Math.hypot(p.x - lastPos.x, p.y - lastPos.y);
+    speed = speed * 0.6 + (d / dt) * 0.4; // smoothed px/ms
+    lastMoveTime = e.timeStamp;
+
+    if (S().mode === 'stamp') stampSegment(lastPos, p);
+    else Forge.Flow.step(lastPos, p, fn => withSymmetry(fn));
+
+    lastPos = p;
+  }
+
+  function onUp(e) {
+    drawing = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  /* ---------------- pressure simulation ---------------- */
+
+  function pressure() {
+    // 1 at rest → drops toward 0 as pointer speed approaches MAX_SPEED
+    return 1 - S().pressureSens * clamp(speed / S().MAX_SPEED, 0, 1);
+  }
+
+  /* ---------------- symmetry ----------------
+     Every draw call is re-run under each transform, same frame. */
+  function withSymmetry(fn) {
+    const st = S();
+    if (st.symmetryMode === 'off') { fn(); return; }
+
+    if (st.symmetryMode === 'mirror') {
+      fn();
+      ctx.save();
+      ctx.translate(cssW, 0); ctx.scale(-1, 1);
+      fn();
+      ctx.restore();
+      return;
+    }
+
+    // radial — N copies rotated around canvas center
+    const n = Math.max(2, Math.round(st.symmetryCount));
+    for (let i = 0; i < n; i++) {
+      ctx.save();
+      if (i > 0) {
+        ctx.translate(cssW / 2, cssH / 2);
+        ctx.rotate((360 / n) * i * Math.PI / 180);
+        ctx.translate(-cssW / 2, -cssH / 2);
+      }
+      fn();
+      ctx.restore();
+    }
+  }
+
+  /* ---------------- STAMP ENGINE ---------------- */
+
+  function stampSpacing() {
+    return Math.max(0.5, S().spacing * S().size);
+  }
+
+  function stampSegment(from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const seg = Math.hypot(dx, dy);
+    if (seg <= 0) return;
+
+    const spacing = stampSpacing();
+    let need = spacingCarry > 0 ? spacingCarry : spacing;
+    let d = 0;
+
+    while (d + need <= seg) {
+      d += need;
+      const t = d / seg;
+      stampAt({ x: from.x + dx * t, y: from.y + dy * t });
+      need = spacing;
+    }
+    spacingCarry = need - (seg - d);
+  }
+
+  function stampAt(pos) {
+    withSymmetry(() => {
+      for (let i = 0; i < Math.max(1, Math.round(S().count)); i++) stampOnce(pos);
+    });
+  }
+
+  function stampOnce(pos) {
+    const st = S();
+    const pressure = Forge.Engine.pressure();
+
+    const angle = st.rotationRandom ? Math.random() * 360 : st.rotation;
+    const scale = Math.max(1, (st.size + (Math.random() * 2 - 1) * st.sizeJitter * st.size) * pressure);
+    const alpha = clamp(st.opacity * (0.5 + pressure * 0.5), 0, 1);
+
+    const ox = (Math.random() * 2 - 1) * st.scatter;
+    const oy = (Math.random() * 2 - 1) * st.scatter;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(pos.x + ox, pos.y + oy);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.drawImage(tipSource(), -scale / 2, -scale / 2, scale, scale);
+    ctx.restore();
+  }
+
+  function tipSource() {
+    const st = S();
+    return (tintedValid && st.color && st.color.toLowerCase() !== '#ffffff') ? tinted : st.tipCanvas;
+  }
+
+  /* COLOR swatch tints the tip (multiply keeps shading, white = no-op). */
+  function rebuildTintedTip() {
+    const st = S();
+    if (!st.tipCanvas) return;
+    tinted.width = st.tipCanvas.width;
+    tinted.height = st.tipCanvas.height;
+    const t = tinted.getContext('2d');
+    t.clearRect(0, 0, tinted.width, tinted.height);
+    t.drawImage(st.tipCanvas, 0, 0);
+    t.globalCompositeOperation = 'multiply';
+    t.fillStyle = st.color || '#ffffff';
+    t.fillRect(0, 0, tinted.width, tinted.height);
+    t.globalCompositeOperation = 'destination-in';
+    t.drawImage(st.tipCanvas, 0, 0);
+    t.globalCompositeOperation = 'source-over';
+    tintedValid = true;
+  }
+
+  /* ---------------- brush ring ---------------- */
+
+  function placeRing(p) {
+    if (!ring) return;
+    ring.style.display = 'block';
+    ring.style.left = p.x + 'px';
+    ring.style.top = p.y + 'px';
+  }
+
+  function updateRing() {
+    if (!ring) return;
+    const sz = S().mode === 'stamp' ? S().size : S().flowSize;
+    ring.style.width = sz + 'px';
+    ring.style.height = sz + 'px';
+  }
+
+  /* ---------------- undo ---------------- */
+
+  function pushHistory() {
+    let im;
+    try { im = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+    catch (_) { return; }
+    history.push(im);
+    historyBytes += im.data.length;
+    while (history.length > MAX_HISTORY ||
+           (history.length > 1 && historyBytes > HISTORY_BUDGET)) {
+      historyBytes -= history.shift().data.length;
+    }
+  }
+
+  function undo() {
+    if (!ready) return;
+    const im = history.pop();
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (im) ctx.putImageData(im, 0, 0);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  }
+
+  function clearCanvas() {
+    if (!ready) return;
+    pushHistory(); // so Ctrl+Z brings it back
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  }
+
+  /* ---------------- public API ---------------- */
+
+  return {
+    attach, resize, undo, clear: clearCanvas,
+    updateRing, rebuildTintedTip, pressure,
+    context: () => ctx,
+    canvasEl: () => canvas,
+    ready: () => ready
+  };
+})();
+
+</script>
+<script>
+/* ~~~ js/export.js ~~~ */
+/* ============================================================
+   FORGE — export.js — PNG tip · GIMP .GBR · Krita .KPP · canvas
+   ============================================================ */
+
+Forge.Export = {
+  download(blob, name) {
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  },
+
+  slug() { return Forge.slug(Forge.state.tipName); },
+
+  /* Tip resampled to 128×128 — the interchange size for GBR/KPP. */
+  tip128() {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    c.getContext('2d').drawImage(Forge.state.tipCanvas, 0, 0, 128, 128);
+    return c;
+  },
+
+  guard() {
+    if (!Forge.state.tipCanvas) { Forge.UI.toast('Load a brush tip first'); return false; }
+    return true;
+  },
+
+  /* ---------------- 8.1 PNG brush tip ---------------- */
+
+  exportTipPNG() {
+    if (!this.guard()) return;
+    this.tip128().toBlob(blob => {
+      if (!blob) { Forge.UI.toast('PNG export failed'); return; }
+      this.download(blob, this.slug() + '-brush-tip.png');
+      Forge.UI.toast('Brush tip PNG exported');
+    }, 'image/png');
+  },
+
+  /* ---------------- 8.2 GIMP .gbr — v2 binary, big-endian ----------------
+     Built with DataView against GIMP's own spec (devel-docs/gbr.txt):
+       [0-3]   header_size  = 28 + name_len + 1
+       [4-7]   version      = 2
+       [8-11]  width        = 128
+       [12-15] height       = 128
+       [16-19] bytes        = 4 (RGBA)
+       [20-23] magic        = 'G','I','M','P'   ← GIMP identifies GBR by this
+       [24-27] spacing      = % of brush width
+       [28..]  brush name   (UTF-8, NUL-terminated)
+       [header_size..] raw RGBA pixels, row-major, top-to-bottom
+     ---------------------------------------------------------------------- */
+
+  exportGBR() {
+    if (!this.guard()) return;
+    const SIZE = 128;
+    const px = this.tip128().getContext('2d').getImageData(0, 0, SIZE, SIZE).data;
+    const name = this.slug().slice(0, 63);
+    const nameBytes = new TextEncoder().encode(name);
+
+    const headerSize = 28 + nameBytes.length + 1;
+    const buf = new ArrayBuffer(headerSize + px.length);
+    const dv = new DataView(buf);
+    const u8 = new Uint8Array(buf);
+
+    dv.setUint32(0, headerSize);              // header_size
+    dv.setUint32(4, 2);                       // version
+    dv.setUint32(8, SIZE);                    // width
+    dv.setUint32(12, SIZE);                   // height
+    dv.setUint32(16, 4);                      // bytes (RGBA)
+    u8[20] = 0x47; u8[21] = 0x49; u8[22] = 0x4D; u8[23] = 0x50; // "GIMP"
+    dv.setUint32(24, Forge.clamp(Math.round(Forge.state.spacing * 100), 1, 1000)); // spacing %
+    u8.set(nameBytes, 28);                    // brush name
+    u8[28 + nameBytes.length] = 0;            // NUL terminator
+    u8.set(px, headerSize);                   // raw RGBA
+
+    this.download(new Blob([buf], { type: 'application/octet-stream' }), name + '.gbr');
+    Forge.UI.toast('.GBR exported — GIMP → Brushes → Import');
+  },
+
+  /* JSZip is fetched only when needed, so the app never depends on the CDN to boot */
+  _loadJsZip() {
+    return new Promise((resolve, reject) => {
+      if (window.JSZip) return resolve(window.JSZip);
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload = () => resolve(window.JSZip);
+      s.onerror = () => reject(new Error('offline'));
+      document.head.appendChild(s);
+    });
+  },
+
+  /* ---------------- 8.3 Krita .kpp — ZIP via JSZip ---------------- */
+
+  async exportKPP() {
+    if (!this.guard()) return;
+    let JSZip;
+    try { JSZip = await this._loadJsZip(); }
+    catch (_) { Forge.UI.toast('Krita export needs internet once, to fetch the zip library'); return; }
+    if (!JSZip) { Forge.UI.toast('The zip library failed to load, try again'); return; }
+
+    const name = this.slug();
+    const zip = new JSZip();
+
+    const pngBlob = await new Promise(res => this.tip128().toBlob(res, 'image/png'));
+    zip.file(name + '.png', pngBlob);
+
+    const spacing = (+Forge.state.spacing).toFixed(2);
+    const opacity = (+Forge.state.opacity).toFixed(2);
+
+    const xml =
+`<!DOCTYPE preset>
+<Preset version="5.0" name="${name}" paintopid="paintbrush">
+ <params>
+  <param name="brush_definition">
+   <brush_definition brush_type="image" angle="0"
+    use_color_as_mask="false" name="${name}"
+    filename="${name}.png" spacing="${spacing}">
+    <BrushTip>
+     <scale>1.0</scale><angle>0.0</angle>
+     <mirrorX>false</mirrorX><mirrorY>false</mirrorY>
+    </BrushTip>
+   </brush_definition>
+  </param>
+  <param name="Opacity"><curve><point x="0" y="${opacity}"/></curve></param>
+ </params>
+</Preset>
+`;
+    zip.file(name + '.kpp', xml);
+
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    this.download(blob, name + '.kpp');
+    Forge.UI.toast('.KPP exported — drop into Krita');
+  },
+
+  /* ---------------- 8.4 Canvas PNG (bg + art flattened) ---------------- */
+
+  exportCanvasPNG() {
+    const src = Forge.Engine.canvasEl();
+    if (!src) return;
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const x = c.getContext('2d');
+    x.fillStyle = Forge.state.bg;
+    x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(src, 0, 0);
+    c.toBlob(blob => {
+      if (!blob) { Forge.UI.toast('Canvas export failed'); return; }
+      this.download(blob, 'forge-canvas.png');
+      Forge.UI.toast('Canvas PNG exported');
+    }, 'image/png');
+  }
+};
+
+</script>
+<script>
+/* ~~~ js/share.js ~~~ */
+/* ============================================================
+   FORGE — share.js — URL-hash brush encoding + saved brushes
+   The tip image travels INSIDE the URL hash, so a shared link
+   works on anyone's machine. localStorage only remembers the
+   encoded URLs for the local SAVED BRUSHES list.
+   ============================================================ */
+
+/* Saved brushes — list of {name, url, ts}. Hardened against
+   sandboxed iframes where localStorage throws. */
+Forge.Saved = {
+  KEY: 'forge.savedBrushes.v1',
+  _mem: [],
+
+  list() {
+    try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); }
+    catch (_) { return this._mem; }
+  },
+  add(entry) {
+    const l = this.list();
+    l.unshift(entry);
+    while (l.length > 30) l.pop();
+    try { localStorage.setItem(this.KEY, JSON.stringify(l)); }
+    catch (_) { this._mem = l; }
+  },
+  remove(i) {
+    const l = this.list();
+    l.splice(i, 1);
+    try { localStorage.setItem(this.KEY, JSON.stringify(l)); }
+    catch (_) { this._mem = l; }
+  }
+};
+
+Forge.Share = {
+  /* Entire brush state + tip dataURL → base64 hash payload. */
+  encode() {
+    const S = Forge.state;
+    const state = {
+      mode: S.mode,
+      spacing: S.spacing, size: S.size, sizeJitter: S.sizeJitter,
+      scatter: S.scatter, rotation: S.rotation, rotationRandom: S.rotationRandom,
+      opacity: S.opacity, count: S.count,
+      flowSize: S.flowSize, flowSpeed: S.flowSpeed, smoothing: S.smoothing,
+      flowScatter: S.flowScatter, flowOpacity: S.flowOpacity,
+      pressureSens: S.pressureSens,
+      symmetryMode: S.symmetryMode, symmetryCount: S.symmetryCount,
+      tipName: S.tipName,
+      tip: S.tipCanvas ? S.tipCanvas.toDataURL('image/png') : null
+    };
+    return btoa(encodeURIComponent(JSON.stringify(state)));
+  },
+
+  /* SHARE THIS BRUSH — set hash, copy link, save to list. */
+  share() {
+    if (!Forge.state.tipCanvas) { Forge.UI.toast('Load a brush tip first'); return; }
+    const enc = this.encode();
+    const url = location.href.split('#')[0] + '#' + enc;
+    try { history.replaceState(null, '', '#' + enc); } catch (_) {}
+
+    Forge.Saved.add({
+      name: (Forge.state.tipName || 'brush') + ' · ' + Forge.state.mode,
+      url,
+      ts: Date.now()
+    });
+    Forge.UI.renderSaved();
+    Forge.UI.copyText(url, 'Link copied — brush saved');
+  },
+
+  /* On page load: restore a shared brush from location.hash. */
+  applyFromHash() {
+    const h = location.hash.replace(/^#/, '');
+    if (!h) return false;
+
+    const st = JSON.parse(decodeURIComponent(atob(h)));
+    const S = Forge.state;
+
+    const NUMS = ['spacing', 'size', 'sizeJitter', 'scatter', 'rotation',
+      'opacity', 'count', 'flowSize', 'flowSpeed', 'smoothing',
+      'flowScatter', 'flowOpacity', 'pressureSens', 'symmetryCount'];
+    for (const k of NUMS) {
+      if (typeof st[k] === 'number' && isFinite(st[k])) S[k] = st[k];
+    }
+    if (st.mode === 'stamp' || st.mode === 'flow') S.mode = st.mode;
+    if (['off', 'mirror', 'radial'].includes(st.symmetryMode)) S.symmetryMode = st.symmetryMode;
+    if (typeof st.rotationRandom === 'boolean') S.rotationRandom = st.rotationRandom;
+    if (typeof st.tipName === 'string' && st.tipName) S.tipName = st.tipName;
+
+    Forge.UI.refreshAll();
+
+    if (typeof st.tip === 'string' && st.tip.startsWith('data:image')) {
+      const img = new Image();
+      img.onload = () => {
+        Forge.setTip(img, S.tipName || 'shared');
+        Forge.UI.toast('Shared brush loaded');
+      };
+      img.onerror = () => Forge.UI.toast('Shared tip image failed to load');
+      img.src = st.tip;
+    } else {
+      Forge.UI.toast('Shared brush loaded');
+    }
+    return true;
+  }
+};
+
+</script>
+<script>
+/* ~~~ js/ui.js ~~~ */
+/* ============================================================
+   forge · ui.js · panels, sliders, upload, splitter, toasts
+   ============================================================ */
+
+Forge.UI = (function () {
+  const S = () => Forge.state;
+  const $ = id => document.getElementById(id);
+
+  const pct = v => Math.round(v * 100) + '%';
+  const px  = v => Math.round(v) + 'px';
+  const int = v => String(Math.round(v));
+
+  const SLIDERS = [
+    // stamp
+    { key: 'spacing',    label: 'Spacing',     min: 0.1, max: 2,   step: 0.01, group: 'stamp',  fmt: v => (+v).toFixed(2) + 'x' },
+    { key: 'size',       label: 'Size',        min: 10,  max: 300, step: 1,    group: 'stamp',  fmt: px },
+    { key: 'sizeJitter', label: 'Size jitter', min: 0,   max: 1,   step: 0.01, group: 'stamp',  fmt: pct },
+    { key: 'scatter',    label: 'Scatter',     min: 0,   max: 200, step: 1,    group: 'stamp',  fmt: px },
+    { key: 'opacity',    label: 'Opacity',     min: 0.05, max: 1,  step: 0.01, group: 'stamp',  fmt: pct },
+    { key: 'count',      label: 'Count',       min: 1,   max: 12,  step: 1,    group: 'stamp',  fmt: int },
+    // flow
+    { key: 'flowSize',   label: 'Flow size',   min: 10,  max: 300, step: 1,    group: 'flow',   fmt: px },
+    { key: 'flowSpeed',  label: 'Flow speed',  min: 0.5, max: 5,   step: 0.05, group: 'flow',   fmt: v => (+v).toFixed(2) + 'x' },
+    { key: 'smoothing',  label: 'Smoothing',   min: 0,   max: 1,   step: 0.01, group: 'flow',   fmt: pct },
+    { key: 'flowScatter',label: 'Scatter',     min: 0,   max: 100, step: 1,    group: 'flow',   fmt: px },
+    { key: 'flowOpacity',label: 'Opacity',     min: 0.05, max: 1,  step: 0.01, group: 'flow',   fmt: pct },
+    // shared
+    { key: 'pressureSens', label: 'Pressure',  min: 0,   max: 1,   step: 0.01, group: 'shared', fmt: pct },
+    // radial only
+    { key: 'symmetryCount', label: 'Count',    min: 2,   max: 8,   step: 1,    group: 'radial', fmt: int }
+  ];
+
+  const inputs = {};
+  let toastTimer = null;
+
+  const GROUP_EL = { stamp: 'groupStamp', flow: 'groupFlow', shared: 'groupShared', radial: 'groupRadial' };
+
+  /* ~~~~~~~~~~~~~~~~ sliders ~~~~~~~~~~~~~~~~ */
+
+  function buildSliders() {
+    for (const cfg of SLIDERS) {
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const top = document.createElement('div');
+      top.className = 'row-top';
+      const lab = document.createElement('label');
+      lab.textContent = cfg.label;
+      const val = document.createElement('span');
+      val.className = 'val';
+      top.append(lab, val);
+
+      const inp = document.createElement('input');
+      inp.type = 'range';
+      inp.min = cfg.min; inp.max = cfg.max; inp.step = cfg.step;
+      inp.value = S()[cfg.key];
+
+      const paint = () => {
+        const v = parseFloat(inp.value);
+        val.textContent = cfg.fmt(v);
+        inp.style.setProperty('--fill', ((v - cfg.min) / (cfg.max - cfg.min)) * 100 + '%');
+      };
+
+      inp.addEventListener('input', () => {
+        S()[cfg.key] = parseFloat(inp.value);
+        paint();
+        if (cfg.key === 'size' || cfg.key === 'flowSize') Forge.Engine.updateRing();
+      });
+
+      row.append(top, inp);
+      $(GROUP_EL[cfg.group]).appendChild(row);
+      inputs[cfg.key] = { inp, paint };
+      paint();
+    }
+  }
+
+  /* rotation row + random toggle (stamp engine) */
+  function buildRotation() {
+    const row = document.createElement('div');
+    row.className = 'row only-stamp';
+
+    const top = document.createElement('div');
+    top.className = 'row-top';
+    const lab = document.createElement('label');
+    lab.textContent = 'Rotation';
+    const right = document.createElement('span');
+    right.style.display = 'flex';
+    right.style.alignItems = 'center';
+    right.style.gap = '8px';
+    const val = document.createElement('span');
+    val.className = 'val';
+    const rnd = document.createElement('button');
+    rnd.type = 'button';
+    rnd.className = 'mini-toggle';
+    rnd.textContent = 'random';
+    rnd.title = 'Random rotation per stamp';
+    right.append(val, rnd);
+    top.append(lab, right);
+
+    const inp = document.createElement('input');
+    inp.type = 'range';
+    inp.min = 0; inp.max = 360; inp.step = 1;
+    inp.value = S().rotation;
+
+    const paint = () => {
+      val.textContent = Math.round(+inp.value) + '\u00B0';
+      inp.style.setProperty('--fill', (+inp.value / 360) * 100 + '%');
+    };
+    const paintRandom = () => {
+      rnd.classList.toggle('active', S().rotationRandom);
+      inp.disabled = S().rotationRandom;
+    };
+
+    inp.addEventListener('input', () => { S().rotation = parseFloat(inp.value); paint(); });
+    rnd.addEventListener('click', () => {
+      S().rotationRandom = !S().rotationRandom;
+      paintRandom();
+    });
+
+    row.append(top, inp);
+    $('groupStamp').appendChild(row);
+    inputs.rotation = { inp, paint };
+    inputs._rotationRandom = { paint: paintRandom };
+    paint(); paintRandom();
+  }
+
+  /* ~~~~~~~~~~~~~~~~ mode + symmetry ~~~~~~~~~~~~~~~~ */
+
+  function setMode(m) {
+    S().mode = m;
+    document.body.dataset.mode = m;
+    document.querySelectorAll('[data-mode-btn]').forEach(b => {
+      const on = b.dataset.modeBtn === m;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on);
+    });
+    Forge.Engine.updateRing();
+  }
+
+  function setSym(sym) {
+    S().symmetryMode = sym;
+    document.body.dataset.sym = sym;
+    document.querySelectorAll('.sym-seg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.sym === sym));
+  }
+
+  /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
+
+  function initSplitter() {
+    const app = $('app');
+    const sp = $('splitter');
+    const mid = document.querySelector('.panel.mid');
+    if (!app || !sp || !mid) return;
+
+    const STORE = 'forge.midWidth';
+    try {
+      const saved = parseInt(localStorage.getItem(STORE), 10);
+      if (saved >= 210 && saved <= 560) mid.style.flexBasis = saved + 'px';
+    } catch (_) {}
+
+    let dragging = false;
+
+    sp.addEventListener('pointerdown', e => {
+      dragging = true;
+      sp.classList.add('dragging');
+      document.body.classList.add('col-dragging');
+      try { sp.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    sp.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const left = mid.getBoundingClientRect().left;
+      const maxW = Math.min(560, app.getBoundingClientRect().width - 500);
+      const w = Forge.clamp(e.clientX - left, 210, Math.max(210, maxW));
+      mid.style.flexBasis = w + 'px';
+    });
+    const stop = e => {
+      if (!dragging) return;
+      dragging = false;
+      sp.classList.remove('dragging');
+      document.body.classList.remove('col-dragging');
+      try { sp.releasePointerCapture(e.pointerId); } catch (_) {}
+      try { localStorage.setItem(STORE, String(mid.getBoundingClientRect().width)); } catch (_) {}
+    };
+    sp.addEventListener('pointerup', stop);
+    sp.addEventListener('pointercancel', stop);
+  }
+
+  /* ~~~~~~~~~~~~~~~~ starter tips ~~~~~~~~~~~~~~~~ */
+
+  function buildStarterTips() {
+    const grid = $('tipsGrid');
+    for (const t of Forge.StarterTips.all()) {
+      const b = document.createElement('button');
+      b.className = 'tip-thumb';
+      b.title = t.name;
+      b.draggable = true;
+
+      const img = document.createElement('img');
+      img.src = t.canvas.toDataURL();
+      img.alt = t.name;
+      img.draggable = false;
+      b.appendChild(img);
+
+      b.addEventListener('click', () => loadStarterTip(t.id));
+      b.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('text/x-forge-tip', t.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      grid.appendChild(b);
+    }
+  }
+
+  function loadStarterTip(id) {
+    const t = Forge.StarterTips.get(id);
+    if (!t) return;
+    Forge.setTip(t.canvas, t.id);
+    Forge.UI.toast('Tip loaded: ' + t.name);
+  }
+
+  /* ~~~~~~~~~~~~~~~~ file upload ~~~~~~~~~~~~~~~~ */
+
+  function handleFiles(files) {
+    const f = files && files[0];
+    if (!f) return;
+    const ok = /^image\/(png|jpe?g|svg\+xml)$/i.test(f.type) || /\.(png|jpe?g|svg)$/i.test(f.name);
+    if (!ok) { toast('That file type does not work, use PNG, JPG or SVG'); return; }
+
+    const base = f.name.replace(/\.[^.]+$/, '') || 'upload';
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      if (!img.naturalWidth && /svg/i.test(f.type + f.name)) fixSvgSize(f, base);
+      else { Forge.setTip(img, base); toast('Brush tip loaded: ' + base); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); toast('Could not read that image'); };
+    img.src = url;
+  }
+
+  /* SVGs without intrinsic dimensions get a viewport injected */
+  async function fixSvgSize(file, base) {
+    try {
+      const txt = await file.text();
+      const patched = /<svg[^>]*\swidth=/i.test(txt)
+        ? txt
+        : txt.replace(/<svg/i, '<svg width="512" height="512"');
+      const b = new Blob([patched], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(b);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); Forge.setTip(img, base); toast('Brush tip loaded: ' + base); };
+      img.onerror = () => { URL.revokeObjectURL(url); toast('Could not read that SVG'); };
+      img.src = url;
+    } catch (_) { toast('Could not read that SVG'); }
+  }
+
+  function wireUpload() {
+    const z = $('uploadZone');
+    const openPicker = () => $('fileInput').click();
+    z.addEventListener('click', openPicker);
+    z.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }
+    });
+    $('fileInput').addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
+
+    ['dragenter', 'dragover'].forEach(ev =>
+      z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+      z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('dragover'); }));
+
+    z.addEventListener('drop', e => {
+      const id = e.dataTransfer.getData('text/x-forge-tip');
+      if (id) { loadStarterTip(id); return; }
+      handleFiles(e.dataTransfer.files);
+    });
+  }
+
+  /* ~~~~~~~~~~~~~~~~ saved brushes ~~~~~~~~~~~~~~~~ */
+
+  const LINK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 14a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>';
+
+  function renderSaved() {
+    const list = Forge.Saved.list();
+    const el = $('savedList');
+    el.innerHTML = '';
+
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'nothing saved yet';
+      el.appendChild(empty);
+      return;
+    }
+
+    list.forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'saved-row';
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = item.name;
+      name.title = item.name;
+
+      const copy = document.createElement('button');
+      copy.className = 'icon-btn';
+      copy.innerHTML = LINK_SVG;
+      copy.title = 'Copy brush link';
+      copy.addEventListener('click', () => copyText(item.url, 'Link copied'));
+
+      const del = document.createElement('button');
+      del.className = 'icon-btn';
+      del.textContent = '\u00D7';
+      del.title = 'Remove from list';
+      del.addEventListener('click', () => { Forge.Saved.remove(i); renderSaved(); });
+
+      row.append(name, copy, del);
+      el.appendChild(row);
+    });
+  }
+
+  /* ~~~~~~~~~~~~~~~~ clipboard / share modal ~~~~~~~~~~~~~~~~ */
+
+  function copyText(text, msg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast(msg || 'Copied'))
+        .catch(() => openShareModal(text));
+    } else {
+      openShareModal(text);
+    }
+  }
+
+  function openShareModal(url) {
+    $('shareUrlInput').value = url;
+    $('shareModal').classList.add('open');
+    $('shareUrlInput').select();
+  }
+
+  function wireModal() {
+    $('shareCopyBtn').addEventListener('click', () => {
+      const v = $('shareUrlInput').value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(v).then(() => toast('Link copied'));
+      } else {
+        $('shareUrlInput').select();
+        try { document.execCommand('copy'); toast('Link copied'); } catch (_) {}
+      }
+    });
+    $('shareCloseBtn').addEventListener('click', () => $('shareModal').classList.remove('open'));
+    $('shareModal').addEventListener('click', e => {
+      if (e.target === $('shareModal')) $('shareModal').classList.remove('open');
+    });
+  }
+
+  /* ~~~~~~~~~~~~~~~~ flow palette strip ~~~~~~~~~~~~~~~~ */
+
+  function drawPaletteStrip() {
+    const c = $('paletteStrip');
+    const pal = Forge.Flow.palette;
+    if (!c || !pal.length) return;
+    const W = Math.min(512, Math.max(64, pal.length));
+    c.width = W; c.height = 12;
+    const x = c.getContext('2d');
+    for (let i = 0; i < W; i++) {
+      const col = pal[Math.floor((i / W) * pal.length)];
+      x.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
+      x.fillRect(i, 0, 1, c.height);
+    }
+  }
+
+  /* ~~~~~~~~~~~~~~~~ toast ~~~~~~~~~~~~~~~~ */
+
+  function toast(msg) {
+    const t = $('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2300);
+  }
+
+  /* ~~~~~~~~~~~~~~~~ refresh (used by URL restore) ~~~~~~~~~~~~~~~~ */
+
+  function refreshAll() {
+    for (const k in inputs) {
+      if (k[0] === '_') continue;
+      if (k === 'rotation') {
+        inputs.rotation.inp.value = S().rotation;
+        inputs.rotation.paint();
+        inputs._rotationRandom.paint();
+        continue;
+      }
+      inputs[k].inp.value = S()[k];
+      inputs[k].paint();
+    }
+    setMode(S().mode);
+    setSym(S().symmetryMode);
+    $('colorInput').value = S().color;
+    $('colorSwatch').style.background = S().color;
+    $('bgInput').value = S().bg;
+    $('bgSwatch').style.background = S().bg;
+    $('canvasWrap').style.background = S().bg;
+    drawPaletteStrip();
+    Forge.Engine.updateRing();
+    if (S().tipCanvas) onTipChanged();
+  }
+
+  function onTipChanged() {
+    const S = Forge.state;
+    if (!S.tipCanvas) return;
+    $('tipPreviewImg').src = S.tipCanvas.toDataURL();
+    $('tipNameLabel').textContent = S.tipName || 'no tip yet';
+    drawPaletteStrip();
+    Forge.Engine.updateRing();
+  }
+
+  /* ~~~~~~~~~~~~~~~~ init ~~~~~~~~~~~~~~~~ */
+
+  function init() {
+    buildSliders();
+    buildRotation();
+    buildStarterTips();
+    wireUpload();
+    wireModal();
+    initSplitter();
+    renderSaved();
+
+    document.querySelectorAll('[data-mode-btn]').forEach(b =>
+      b.addEventListener('click', () => setMode(b.dataset.modeBtn)));
+
+    document.querySelectorAll('.sym-seg button').forEach(b =>
+      b.addEventListener('click', () => setSym(b.dataset.sym)));
+
+    $('clearBtn').addEventListener('click', () => Forge.Engine.clear());
+    $('undoBtn').addEventListener('click', () => Forge.Engine.undo());
+
+    $('colorInput').addEventListener('input', e => {
+      S().color = e.target.value;
+      $('colorSwatch').style.background = S().color;
+      Forge.Engine.rebuildTintedTip();
+    });
+    $('bgInput').addEventListener('input', e => {
+      S().bg = e.target.value;
+      $('bgSwatch').style.background = S().bg;
+      $('canvasWrap').style.background = S().bg;
+    });
+
+    $('exportTipPng').addEventListener('click', () => Forge.Export.exportTipPNG());
+    $('exportGbr').addEventListener('click', () => Forge.Export.exportGBR());
+    $('exportKpp').addEventListener('click', () => Forge.Export.exportKPP());
+    $('exportCanvasPng').addEventListener('click', () => Forge.Export.exportCanvasPNG());
+    $('shareBtn').addEventListener('click', () => Forge.Share.share());
+
+    window.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        Forge.Engine.undo();
+      }
+    });
+
+    $('colorSwatch').style.background = S().color;
+    $('bgSwatch').style.background = S().bg;
+  }
+
+  return {
+    init, toast, renderSaved, refreshAll, onTipChanged, copyText,
+    setMode, setSym, loadStarterTip, drawPaletteStrip
+  };
+})();
+
+</script>
+<script>
+/* ~~~ js/main.js ~~~ */
+/* ============================================================
+   FORGE — main.js — bootstrap
+   ============================================================ */
+
+/* Central "load a tip" routine: normalize to 256×256 (contain-fit,
+   alpha preserved), resample the flow palette, refresh the UI. */
+Forge.setTip = function (source, name) {
+  const S = Forge.state;
+  const N = 256;
+
+  const iw = source.naturalWidth || source.width;
+  const ih = source.naturalHeight || source.height;
+  if (!iw || !ih) return;
+
+  const c = document.createElement('canvas');
+  c.width = N; c.height = N;
+  const x = c.getContext('2d');
+  const sc = Math.min(N / iw, N / ih);
+  const w = iw * sc, h = ih * sc;
+  x.drawImage(source, (N - w) / 2, (N - h) / 2, w, h);
+
+  S.tipCanvas = c;
+  S.tipName = name || S.tipName || 'brush';
+
+  Forge.Engine.rebuildTintedTip();
+  Forge.Flow.samplePalette(c);
+  Forge.UI.onTipChanged();
+};
+
+(function () {
+  function boot() {
+    Forge.UI.init();
+    Forge.Engine.attach(
+      document.getElementById('canvas'),
+      document.getElementById('canvasWrap'),
+      document.getElementById('brushRing')
+    );
+
+    // shared brush in the URL hash beats the default tip
+    let loaded = false;
+    if (location.hash.length > 1) {
+      try { loaded = Forge.Share.applyFromHash(); }
+      catch (_) { Forge.UI.toast('Could not load shared brush'); }
+    }
+    if (!loaded) {
+      const d = Forge.StarterTips.get('diamond');
+      Forge.setTip(d.canvas, d.id);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+</script>
+<script>
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    var ok = window.Forge && Forge.Engine && Forge.Engine.ready && Forge.Engine.ready();
+    var el = document.getElementById('bootWarning');
+    if (el) el.style.display = ok ? 'none' : 'block';
+  }, 1200);
+});
+</script>
+</body>
+</html>

@@ -80,11 +80,26 @@ Forge.Export = {
     Forge.UI.toast('.GBR exported — GIMP → Brushes → Import');
   },
 
+  /* JSZip is fetched only when needed, so the app never depends on the CDN to boot */
+  _loadJsZip() {
+    return new Promise((resolve, reject) => {
+      if (window.JSZip) return resolve(window.JSZip);
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload = () => resolve(window.JSZip);
+      s.onerror = () => reject(new Error('offline'));
+      document.head.appendChild(s);
+    });
+  },
+
   /* ---------------- 8.3 Krita .kpp — ZIP via JSZip ---------------- */
 
   async exportKPP() {
     if (!this.guard()) return;
-    if (!window.JSZip) { Forge.UI.toast('JSZip failed to load — check connection'); return; }
+    let JSZip;
+    try { JSZip = await this._loadJsZip(); }
+    catch (_) { Forge.UI.toast('Krita export needs internet once, to fetch the zip library'); return; }
+    if (!JSZip) { Forge.UI.toast('The zip library failed to load, try again'); return; }
 
     const name = this.slug();
     const zip = new JSZip();

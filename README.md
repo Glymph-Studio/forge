@@ -18,8 +18,18 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-Double clicking `index.html` works too. You need internet the first time for fonts
-and the zip library.
+The server has to run inside the folder that contains `index.html`. If you see a
+file listing instead of the app, you are one folder up.
+
+No server around? Run `python3 build-standalone.py` once, then just double click
+`forge-standalone.html`. It packs everything into one file that works offline.
+
+If an orange box appears saying forge did not fully load, read it: it lists
+exactly which script failed and the first error, so the cause is right there.
+It usually means the `js` folder did not make it next to `index.html`.
+
+Double clicking `index.html` itself works in most browsers too. You need internet
+the first time for fonts, and for the Krita export which fetches the zip library.
 
 ## Things to try
 
