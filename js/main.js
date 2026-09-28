@@ -1,9 +1,10 @@
 /* ============================================================
-   FORGE — main.js — bootstrap
+   forge · main.js · bootstrap
    ============================================================ */
 
-/* Central "load a tip" routine: normalize to 256×256 (contain-fit,
-   alpha preserved), resample the flow palette, refresh the UI. */
+/* Central "load a tip" routine: normalize to 256x256 (contain fit,
+   alpha preserved), keep a pristine copy for the png maker, resample
+   the flow palette, refresh the UI. */
 Forge.setTip = function (source, name) {
   const S = Forge.state;
   const N = 256;
@@ -21,6 +22,8 @@ Forge.setTip = function (source, name) {
 
   S.tipCanvas = c;
   S.tipName = name || S.tipName || 'brush';
+
+  if (Forge.Cutout) Forge.Cutout.setOriginal(c);
 
   Forge.Engine.rebuildTintedTip();
   Forge.Flow.samplePalette(c);

@@ -1,5 +1,5 @@
 /* ============================================================
-   forge · ui.js · panels, sliders, upload, splitter, toasts
+   forge · ui.js · panels, sliders, upload, png maker, toasts
    ============================================================ */
 
 Forge.UI = (function () {
@@ -142,6 +142,55 @@ Forge.UI = (function () {
     document.body.dataset.sym = sym;
     document.querySelectorAll('.sym-seg button').forEach(b =>
       b.classList.toggle('active', b.dataset.sym === sym));
+  }
+
+  /* ~~~~~~~~~~~~~~~~ undo / redo buttons ~~~~~~~~~~~~~~~~ */
+
+  function syncHistoryButtons() {
+    const u = $('undoBtn'), r = $('redoBtn');
+    if (u) u.disabled = !Forge.Engine.canUndo();
+    if (r) r.disabled = !Forge.Engine.canRedo();
+  }
+
+  /* ~~~~~~~~~~~~~~~~ png maker (cutout) ~~~~~~~~~~~~~~~~ */
+
+  function refreshCutTol() {
+    const inp = $('cutTol');
+    $('cutTolVal').textContent = Math.round(+inp.value * 100) + '%';
+    inp.style.setProperty('--fill', ((+inp.value - 0.02) / 0.98) * 100 + '%');
+  }
+
+  function applyTipCanvas(c, msg) {
+    S().tipCanvas = c;
+    Forge.Engine.rebuildTintedTip();
+    Forge.Flow.samplePalette(c);
+    Forge.UI.onTipChanged();
+    if (msg) Forge.UI.toast(msg);
+  }
+
+  function wireCutout() {
+    const pv = $('tipPreviewCanvas');
+
+    pv.addEventListener('click', e => {
+      if (!S().tipCanvas) { toast('Load a tip first, then tap a color here'); return; }
+      if (!Forge.Cutout.hasOriginal()) return;
+      const r = pv.getBoundingClientRect();
+      const nx = (e.clientX - r.left) * (256 / Math.max(1, r.width));
+      const ny = (e.clientY - r.top) * (256 / Math.max(1, r.height));
+      const tol = parseFloat($('cutTol').value);
+      const out = Forge.Cutout.eraseAt(nx, ny, tol);
+      if (!out) { toast('That spot is already empty, try a colored area'); return; }
+      applyTipCanvas(out, 'Background erased, your PNG is ready to export');
+    });
+
+    $('cutTol').addEventListener('input', refreshCutTol);
+
+    $('cutResetBtn').addEventListener('click', () => {
+      if (!Forge.Cutout.hasOriginal()) { toast('Load a tip first'); return; }
+      applyTipCanvas(Forge.Cutout.restore(), 'Original image back');
+    });
+
+    refreshCutTol();
   }
 
   /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
@@ -379,6 +428,16 @@ Forge.UI = (function () {
     toastTimer = setTimeout(() => t.classList.remove('show'), 2300);
   }
 
+  /* ~~~~~~~~~~~~~~~~ preview canvas ~~~~~~~~~~~~~~~~ */
+
+  function drawPreview() {
+    const pv = $('tipPreviewCanvas');
+    if (!pv) return;
+    const x = pv.getContext('2d');
+    x.clearRect(0, 0, pv.width, pv.height);
+    if (S().tipCanvas) x.drawImage(S().tipCanvas, 0, 0, pv.width, pv.height);
+  }
+
   /* ~~~~~~~~~~~~~~~~ refresh (used by URL restore) ~~~~~~~~~~~~~~~~ */
 
   function refreshAll() {
@@ -402,14 +461,15 @@ Forge.UI = (function () {
     $('canvasWrap').style.background = S().bg;
     drawPaletteStrip();
     Forge.Engine.updateRing();
+    syncHistoryButtons();
     if (S().tipCanvas) onTipChanged();
   }
 
   function onTipChanged() {
     const S = Forge.state;
     if (!S.tipCanvas) return;
-    $('tipPreviewImg').src = S.tipCanvas.toDataURL();
     $('tipNameLabel').textContent = S.tipName || 'no tip yet';
+    drawPreview();
     drawPaletteStrip();
     Forge.Engine.updateRing();
   }
@@ -422,6 +482,7 @@ Forge.UI = (function () {
     buildStarterTips();
     wireUpload();
     wireModal();
+    wireCutout();
     initSplitter();
     renderSaved();
 
@@ -433,6 +494,7 @@ Forge.UI = (function () {
 
     $('clearBtn').addEventListener('click', () => Forge.Engine.clear());
     $('undoBtn').addEventListener('click', () => Forge.Engine.undo());
+    $('redoBtn').addEventListener('click', () => Forge.Engine.redo());
 
     $('colorInput').addEventListener('input', e => {
       S().color = e.target.value;
@@ -452,18 +514,24 @@ Forge.UI = (function () {
     $('shareBtn').addEventListener('click', () => Forge.Share.share());
 
     window.addEventListener('keydown', e => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) {
         e.preventDefault();
         Forge.Engine.undo();
+      } else if (((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey)))) {
+        e.preventDefault();
+        Forge.Engine.redo();
       }
     });
 
     $('colorSwatch').style.background = S().color;
     $('bgSwatch').style.background = S().bg;
+    syncHistoryButtons();
   }
 
   return {
     init, toast, renderSaved, refreshAll, onTipChanged, copyText,
-    setMode, setSym, loadStarterTip, drawPaletteStrip
+    setMode, setSym, loadStarterTip, drawPaletteStrip,
+    syncHistoryButtons
   };
 })();

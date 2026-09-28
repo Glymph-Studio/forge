@@ -474,6 +474,27 @@ body[data-sym="radial"] .only-radial{ display:block; }
 .mode-seg.desktop-only{ display:flex; }
 .mode-seg.mini{ display:none; }
 
+/* ~~~~~~~~~~~~~~~~ png maker (cutout) ~~~~~~~~~~~~~~~~ */
+
+.cutout-block{ display:flex; flex-direction:column; gap:4px; }
+.cutout-hint{
+  font-size:10.5px; font-weight:600; color:var(--muted);
+  line-height:1.7; margin-bottom:6px;
+}
+.cutout-block .btn{ margin-bottom:0; padding:9px 10px; font-size:11.5px; }
+.tip-preview canvas{
+  width:100%; height:100%; display:block;
+  cursor:crosshair;
+}
+.tip-preview.has-tip canvas{ animation:plop .25s ease; }
+@keyframes plop{ 0%{ transform:scale(.9); } 100%{ transform:scale(1); } }
+
+/* ~~~~~~~~~~~~~~~~ disabled buttons ~~~~~~~~~~~~~~~~ */
+
+.tbtn:disabled{ opacity:.4; pointer-events:none; }
+
+.canvas-topbar .bar-spacer{ pointer-events:none; }
+
 /* ~~~~~~~~~~~~~~~~ phone + tablet ~~~~~~~~~~~~~~~~ */
 
 @media (max-width: 960px){

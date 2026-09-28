@@ -4,14 +4,18 @@
 
 Forge.Export = {
   download(blob, name) {
-    const a = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    try {
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (_) {
+      Forge.UI.toast('Download blocked here, try a normal browser tab');
+    }
   },
 
   slug() { return Forge.slug(Forge.state.tipName); },
@@ -58,7 +62,9 @@ Forge.Export = {
     const SIZE = 128;
     const px = this.tip128().getContext('2d').getImageData(0, 0, SIZE, SIZE).data;
     const name = this.slug().slice(0, 63);
-    const nameBytes = new TextEncoder().encode(name);
+    // the slug is ascii by construction, so byte-wise copy is safe
+    const nameBytes = new Uint8Array(name.length);
+    for (let i = 0; i < name.length; i++) nameBytes[i] = name.charCodeAt(i) & 0x7F;
 
     const headerSize = 28 + nameBytes.length + 1;
     const buf = new ArrayBuffer(headerSize + px.length);

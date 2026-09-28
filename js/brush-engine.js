@@ -1,7 +1,13 @@
 /* ============================================================
-   FORGE — brush-engine.js
-   Canvas manager · STAMP engine · symmetry · undo · pointer I/O
-   Pointer Events only (mouse / touch / stylus).
+   forge · brush-engine.js
+   canvas manager · stamp engine · symmetry · history · pointer I/O
+   Pointer Events only (mouse, touch, stylus).
+
+   History design (the "undo actually works" edition):
+   · a snapshot is taken the moment a stroke FINISHES, not when it starts
+   · the stack starts with the blank canvas, so undo always has a floor
+   · a cursor walks the stack: undo steps back, redo steps forward
+   · clear pushes a snapshot too, so clearing is itself undoable
    ============================================================ */
 
 Forge.Engine = (function () {
@@ -11,18 +17,88 @@ Forge.Engine = (function () {
   let canvas, ctx, wrap, ring;
   let dpr = 1, cssW = 0, cssH = 0;
   let drawing = false;
-  let lastPos = null;        // last pointer position (css px)
-  let lastPointer = null;    // for the ring, even when not drawing
-  let spacingCarry = 0;      // px left until the next stamp
-  let speed = 0;             // smoothed pointer speed, px/ms
+  let strokeDirty = false;   // did this stroke actually paint anything
+  let lastPos = null;
+  let lastPointer = null;
+  let spacingCarry = 0;
+  let speed = 0;
   let lastMoveTime = 0;
-  let history = [];
-  const MAX_HISTORY = 20;
-  const tinted = document.createElement('canvas'); // color-multiplied tip
-  let tintedValid = false;
   let ready = false;
 
-  /* ---------------- setup ---------------- */
+  /* the color-multiplied copy of the tip used by the color swatch */
+  const tinted = document.createElement('canvas');
+  let tintedValid = false;
+
+  /* ~~~~~~~~~~~~~~~~ history ~~~~~~~~~~~~~~~~ */
+
+  let history = [];
+  let histIndex = -1;
+  let historyBytes = 0;
+  const MAX_HISTORY = 30;
+  const HISTORY_BUDGET = 320 * 1024 * 1024; // bytes, keeps hi-dpi sane
+
+  function syncButtons() {
+    if (Forge.UI && Forge.UI.syncHistoryButtons) Forge.UI.syncHistoryButtons();
+  }
+
+  function pushSnapshot() {
+    if (!ready) return;
+    let im;
+    try { im = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+    catch (_) { return; }
+
+    // drop any redo tail
+    while (history.length > histIndex + 1) {
+      historyBytes -= history.pop().data.length;
+    }
+
+    history.push(im);
+    histIndex++;
+    historyBytes += im.data.length;
+
+    // trim the oldest end, keeping the cursor aligned
+    while (history.length > 1 &&
+           (history.length > MAX_HISTORY || historyBytes > HISTORY_BUDGET)) {
+      historyBytes -= history.shift().data.length;
+      histIndex--;
+    }
+    syncButtons();
+  }
+
+  function restoreSnapshot(im) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.putImageData(im, 0, 0);
+    ctx.restore();
+  }
+
+  function undo() {
+    if (!ready || histIndex <= 0) {
+      if (Forge.UI) Forge.UI.toast('Nothing left to undo');
+      return false;
+    }
+    histIndex--;
+    restoreSnapshot(history[histIndex]);
+    syncButtons();
+    return true;
+  }
+
+  function redo() {
+    if (!ready || histIndex >= history.length - 1) {
+      if (Forge.UI) Forge.UI.toast('Nothing to redo');
+      return false;
+    }
+    histIndex++;
+    restoreSnapshot(history[histIndex]);
+    syncButtons();
+    return true;
+  }
+
+  function canUndo() { return ready && histIndex > 0; }
+  function canRedo() { return ready && histIndex < history.length - 1; }
+
+  /* ~~~~~~~~~~~~~~~~ setup ~~~~~~~~~~~~~~~~ */
 
   function attach(canvasEl, wrapEl, ringEl) {
     canvas = canvasEl; wrap = wrapEl; ring = ringEl;
@@ -41,6 +117,7 @@ Forge.Engine = (function () {
 
     resize();
     ready = true;
+    pushSnapshot(); // floor of the stack: the blank canvas
   }
 
   function resize() {
@@ -65,7 +142,7 @@ Forge.Engine = (function () {
     if (prev) ctx.drawImage(prev, 0, 0, w, h);
   }
 
-  /* ---------------- pointer I/O ---------------- */
+  /* ~~~~~~~~~~~~~~~~ pointer I/O ~~~~~~~~~~~~~~~~ */
 
   function pos(e) {
     const r = canvas.getBoundingClientRect();
@@ -81,17 +158,19 @@ Forge.Engine = (function () {
     const p = pos(e);
     lastPointer = p; placeRing(p);
     drawing = true;
+    strokeDirty = false;
     lastPos = p;
     speed = 0;
     lastMoveTime = e.timeStamp;
-    pushHistory(); // pre-stroke snapshot
 
     if (S().mode === 'stamp') {
       stampAt(p);
+      strokeDirty = true;
       spacingCarry = stampSpacing();
     } else {
       Forge.Flow.resetStroke();
       withSymmetry(() => Forge.Flow.drawDot(ctx, p, Forge.Flow.colorAt(0)));
+      strokeDirty = true;
     }
   }
 
@@ -102,7 +181,8 @@ Forge.Engine = (function () {
 
     const dt = Math.max(1, e.timeStamp - lastMoveTime);
     const d = Math.hypot(p.x - lastPos.x, p.y - lastPos.y);
-    speed = speed * 0.6 + (d / dt) * 0.4; // smoothed px/ms
+    if (d > 0) strokeDirty = true;
+    speed = speed * 0.6 + (d / dt) * 0.4; // smoothed px per ms
     lastMoveTime = e.timeStamp;
 
     if (S().mode === 'stamp') stampSegment(lastPos, p);
@@ -112,19 +192,21 @@ Forge.Engine = (function () {
   }
 
   function onUp(e) {
+    if (drawing && strokeDirty) pushSnapshot(); // one snapshot per finished stroke
     drawing = false;
+    strokeDirty = false;
     try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
   }
 
-  /* ---------------- pressure simulation ---------------- */
+  /* ~~~~~~~~~~~~~~~~ pressure simulation ~~~~~~~~~~~~~~~~ */
 
   function pressure() {
-    // 1 at rest → drops toward 0 as pointer speed approaches MAX_SPEED
+    // 1 at rest, drops toward 0 as the pointer approaches MAX_SPEED
     return 1 - S().pressureSens * clamp(speed / S().MAX_SPEED, 0, 1);
   }
 
-  /* ---------------- symmetry ----------------
-     Every draw call is re-run under each transform, same frame. */
+  /* ~~~~~~~~~~~~~~~~ symmetry ~~~~~~~~~~~~~~~~
+     every draw call re-runs under each transform, same frame */
   function withSymmetry(fn) {
     const st = S();
     if (st.symmetryMode === 'off') { fn(); return; }
@@ -138,7 +220,7 @@ Forge.Engine = (function () {
       return;
     }
 
-    // radial — N copies rotated around canvas center
+    // radial · N copies rotated around the canvas center
     const n = Math.max(2, Math.round(st.symmetryCount));
     for (let i = 0; i < n; i++) {
       ctx.save();
@@ -152,7 +234,7 @@ Forge.Engine = (function () {
     }
   }
 
-  /* ---------------- STAMP ENGINE ---------------- */
+  /* ~~~~~~~~~~~~~~~~ stamp engine ~~~~~~~~~~~~~~~~ */
 
   function stampSpacing() {
     return Math.max(0.5, S().spacing * S().size);
@@ -206,7 +288,7 @@ Forge.Engine = (function () {
     return (tintedValid && st.color && st.color.toLowerCase() !== '#ffffff') ? tinted : st.tipCanvas;
   }
 
-  /* COLOR swatch tints the tip (multiply keeps shading, white = no-op). */
+  /* the color swatch tints the tip (multiply keeps shading, white is a no-op) */
   function rebuildTintedTip() {
     const st = S();
     if (!st.tipCanvas) return;
@@ -224,7 +306,7 @@ Forge.Engine = (function () {
     tintedValid = true;
   }
 
-  /* ---------------- brush ring ---------------- */
+  /* ~~~~~~~~~~~~~~~~ brush ring ~~~~~~~~~~~~~~~~ */
 
   function placeRing(p) {
     if (!ring) return;
@@ -240,43 +322,23 @@ Forge.Engine = (function () {
     ring.style.height = sz + 'px';
   }
 
-  /* ---------------- undo ---------------- */
-
-  function pushHistory() {
-    let im;
-    try { im = ctx.getImageData(0, 0, canvas.width, canvas.height); }
-    catch (_) { return; }
-    history.push(im);
-    historyBytes += im.data.length;
-    while (history.length > MAX_HISTORY ||
-           (history.length > 1 && historyBytes > HISTORY_BUDGET)) {
-      historyBytes -= history.shift().data.length;
-    }
-  }
-
-  function undo() {
-    if (!ready) return;
-    const im = history.pop();
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (im) ctx.putImageData(im, 0, 0);
-    else ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
-  }
+  /* ~~~~~~~~~~~~~~~~ clear ~~~~~~~~~~~~~~~~ */
 
   function clearCanvas() {
     if (!ready) return;
-    pushHistory(); // so Ctrl+Z brings it back
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
+    pushSnapshot(); // clearing is undoable like anything else
+    if (Forge.UI) Forge.UI.toast('Canvas cleared');
   }
 
-  /* ---------------- public API ---------------- */
+  /* ~~~~~~~~~~~~~~~~ public api ~~~~~~~~~~~~~~~~ */
 
   return {
-    attach, resize, undo, clear: clearCanvas,
+    attach, resize, undo, redo, clear: clearCanvas,
+    canUndo, canRedo,
     updateRing, rebuildTintedTip, pressure,
     context: () => ctx,
     canvasEl: () => canvas,

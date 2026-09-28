@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>forge · turn images into brushes</title>
 <meta name="description" content="Turn any image into a digital brush. Paint with its colors, test it live, export to GIMP and Krita.">
+<meta name="theme-color" content="#fdf9f0">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23ffd66e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Comic%20Sans%20MS,cursive'%20font-size='19'%20font-weight='bold'%20fill='%234a4136'%20text-anchor='middle'%3Ef%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap"></noscript>
 <style>
 /* ============================================================
    forge · style.css
@@ -486,6 +488,27 @@ body[data-sym="radial"] .only-radial{ display:block; }
 .mode-seg.desktop-only{ display:flex; }
 .mode-seg.mini{ display:none; }
 
+/* ~~~~~~~~~~~~~~~~ png maker (cutout) ~~~~~~~~~~~~~~~~ */
+
+.cutout-block{ display:flex; flex-direction:column; gap:4px; }
+.cutout-hint{
+  font-size:10.5px; font-weight:600; color:var(--muted);
+  line-height:1.7; margin-bottom:6px;
+}
+.cutout-block .btn{ margin-bottom:0; padding:9px 10px; font-size:11.5px; }
+.tip-preview canvas{
+  width:100%; height:100%; display:block;
+  cursor:crosshair;
+}
+.tip-preview.has-tip canvas{ animation:plop .25s ease; }
+@keyframes plop{ 0%{ transform:scale(.9); } 100%{ transform:scale(1); } }
+
+/* ~~~~~~~~~~~~~~~~ disabled buttons ~~~~~~~~~~~~~~~~ */
+
+.tbtn:disabled{ opacity:.4; pointer-events:none; }
+
+.canvas-topbar .bar-spacer{ pointer-events:none; }
+
 /* ~~~~~~~~~~~~~~~~ phone + tablet ~~~~~~~~~~~~~~~~ */
 
 @media (max-width: 960px){
@@ -557,8 +580,18 @@ body[data-sym="radial"] .only-radial{ display:block; }
     <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" hidden>
 
     <div class="preview-block">
-      <div class="tip-preview"><img id="tipPreviewImg" alt="brush tip preview"></div>
+      <div class="tip-preview"><canvas id="tipPreviewCanvas" width="256" height="256" title="Click a color to erase it"></canvas></div>
       <div class="tip-name" id="tipNameLabel">no tip yet</div>
+    </div>
+
+    <div class="cutout-block" id="cutoutBlock">
+      <div class="section-label dot-pink">Png maker</div>
+      <div class="cutout-hint">Click a color on the image above to erase it. Flat backgrounds come out clean, ready to export as a transparent PNG.</div>
+      <div class="row">
+        <div class="row-top"><label for="cutTol">Eraser reach</label><span class="val" id="cutTolVal">15%</span></div>
+        <input type="range" id="cutTol" min="0.02" max="1" step="0.01" value="0.15">
+      </div>
+      <button class="btn" id="cutResetBtn">Bring the original back</button>
     </div>
 
     <div class="section-label dot-yellow">Starter tips</div>
@@ -629,6 +662,7 @@ body[data-sym="radial"] .only-radial{ display:block; }
         <span class="bar-spacer"></span>
         <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
         <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
         <label class="tbtn" title="Stamp tint color">
           Color<span class="swatch" id="colorSwatch"></span>
           <input type="color" id="colorInput" value="#ffffff">
@@ -660,9 +694,7 @@ body[data-sym="radial"] .only-radial{ display:block; }
 
 <!-- shown only if the scripts below fail to load (sandboxed previews block them) -->
 <div class="boot-warning" id="bootWarning">
-  forge could not fully load here. If you are viewing a locked preview, download the
-  folder and open <b>index.html</b> in your browser, or serve it with
-  <b>python3 -m http.server</b>.
+  forge is still loading, one moment.
 </div>
 <noscript>
   <div class="boot-warning">forge needs JavaScript to draw. Please enable it and reload.</div>
@@ -888,6 +920,103 @@ Forge.StarterTips = (function () {
 
 </script>
 <script>
+/* ~~~ js/cutout.js ~~~ */
+/* ============================================================
+   forge · cutout.js · the png maker
+   Click a color on the tip preview and that connected patch turns
+   transparent, with softened edges. Point it at a photo on a flat
+   background and out comes a clean transparent PNG you can export,
+   draw with, or hand to GIMP and Krita.
+   ============================================================ */
+
+Forge.Cutout = {
+  N: 256,
+  original: null,   // the untouched canvas from load time
+
+  setOriginal(canvas) { this.original = canvas; },
+  hasOriginal() { return !!this.original; },
+
+  /* Erase everything connected to (nx, ny) whose color sits within
+     tol01 of the sampled color. Kept pixels hugging the erased area
+     fade out by how close their own color is, which kills the halo
+     a hard edge would leave. Returns the new canvas. */
+  eraseAt(nx, ny, tol01) {
+    const N = this.N;
+    if (!this.original) return null;
+
+    const x0 = Forge.clamp(Math.round(nx), 0, N - 1);
+    const y0 = Forge.clamp(Math.round(ny), 0, N - 1);
+
+    const src = this.original.getContext('2d').getImageData(0, 0, N, N);
+    const d = src.data;
+
+    const start = (y0 * N + x0) * 4;
+    if (d[start + 3] === 0) return null; // that spot is already empty
+
+    const kr = d[start], kg = d[start + 1], kb = d[start + 2];
+    const maxDist = 8 + tol01 * 200;
+    const soft = Math.max(12, maxDist * 0.45);
+
+    const dist = p => {
+      const dr = d[p * 4] - kr, dg = d[p * 4 + 1] - kg, db = d[p * 4 + 2] - kb;
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+
+    // flood fill from the clicked pixel
+    const visited = new Uint8Array(N * N);
+    const stack = new Int32Array(N * N);
+    let sp = 0;
+    stack[sp++] = y0 * N + x0;
+    visited[y0 * N + x0] = 1;
+
+    const removed = [];
+    while (sp > 0) {
+      const p = stack[--sp];
+      removed.push(p);
+      d[p * 4 + 3] = 0;
+      const px = p % N, py = (p / N) | 0;
+
+      if (px > 0     && !visited[p - 1] && dist(p - 1) <= maxDist) { visited[p - 1] = 1; stack[sp++] = p - 1; }
+      if (px < N - 1 && !visited[p + 1] && dist(p + 1) <= maxDist) { visited[p + 1] = 1; stack[sp++] = p + 1; }
+      if (py > 0     && !visited[p - N] && dist(p - N) <= maxDist) { visited[p - N] = 1; stack[sp++] = p - N; }
+      if (py < N - 1 && !visited[p + N] && dist(p + N) <= maxDist) { visited[p + N] = 1; stack[sp++] = p + N; }
+    }
+
+    // soften the cut edge: kept neighbours fade by their own color distance
+    const fade = new Float32Array(N * N).fill(1);
+    for (const p of removed) {
+      const px = p % N, py = (p / N) | 0;
+      const nbs = [];
+      if (px > 0) nbs.push(p - 1);
+      if (px < N - 1) nbs.push(p + 1);
+      if (py > 0) nbs.push(p - N);
+      if (py < N - 1) nbs.push(p + N);
+      for (const q of nbs) {
+        if (d[q * 4 + 3] === 0) continue; // already erased
+        const dd = dist(q);
+        if (dd <= maxDist + soft) {
+          const m = Forge.clamp((dd - maxDist) / soft, 0, 1);
+          if (m < fade[q]) fade[q] = m;
+        }
+      }
+    }
+    for (let q = 0; q < N * N; q++) {
+      if (fade[q] < 1 && d[q * 4 + 3] > 0) {
+        d[q * 4 + 3] = Math.round(d[q * 4 + 3] * fade[q]);
+      }
+    }
+
+    const out = document.createElement('canvas');
+    out.width = N; out.height = N;
+    out.getContext('2d').putImageData(src, 0, 0);
+    return out;
+  },
+
+  restore() { return this.original; }
+};
+
+</script>
+<script>
 /* ~~~ js/flow-mode.js ~~~ */
 /* ============================================================
    FORGE — flow-mode.js — THE HEADLINE FEATURE
@@ -1058,9 +1187,15 @@ Forge.Flow = {
 <script>
 /* ~~~ js/brush-engine.js ~~~ */
 /* ============================================================
-   FORGE — brush-engine.js
-   Canvas manager · STAMP engine · symmetry · undo · pointer I/O
-   Pointer Events only (mouse / touch / stylus).
+   forge · brush-engine.js
+   canvas manager · stamp engine · symmetry · history · pointer I/O
+   Pointer Events only (mouse, touch, stylus).
+
+   History design (the "undo actually works" edition):
+   · a snapshot is taken the moment a stroke FINISHES, not when it starts
+   · the stack starts with the blank canvas, so undo always has a floor
+   · a cursor walks the stack: undo steps back, redo steps forward
+   · clear pushes a snapshot too, so clearing is itself undoable
    ============================================================ */
 
 Forge.Engine = (function () {
@@ -1070,18 +1205,88 @@ Forge.Engine = (function () {
   let canvas, ctx, wrap, ring;
   let dpr = 1, cssW = 0, cssH = 0;
   let drawing = false;
-  let lastPos = null;        // last pointer position (css px)
-  let lastPointer = null;    // for the ring, even when not drawing
-  let spacingCarry = 0;      // px left until the next stamp
-  let speed = 0;             // smoothed pointer speed, px/ms
+  let strokeDirty = false;   // did this stroke actually paint anything
+  let lastPos = null;
+  let lastPointer = null;
+  let spacingCarry = 0;
+  let speed = 0;
   let lastMoveTime = 0;
-  let history = [];
-  const MAX_HISTORY = 20;
-  const tinted = document.createElement('canvas'); // color-multiplied tip
-  let tintedValid = false;
   let ready = false;
 
-  /* ---------------- setup ---------------- */
+  /* the color-multiplied copy of the tip used by the color swatch */
+  const tinted = document.createElement('canvas');
+  let tintedValid = false;
+
+  /* ~~~~~~~~~~~~~~~~ history ~~~~~~~~~~~~~~~~ */
+
+  let history = [];
+  let histIndex = -1;
+  let historyBytes = 0;
+  const MAX_HISTORY = 30;
+  const HISTORY_BUDGET = 320 * 1024 * 1024; // bytes, keeps hi-dpi sane
+
+  function syncButtons() {
+    if (Forge.UI && Forge.UI.syncHistoryButtons) Forge.UI.syncHistoryButtons();
+  }
+
+  function pushSnapshot() {
+    if (!ready) return;
+    let im;
+    try { im = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+    catch (_) { return; }
+
+    // drop any redo tail
+    while (history.length > histIndex + 1) {
+      historyBytes -= history.pop().data.length;
+    }
+
+    history.push(im);
+    histIndex++;
+    historyBytes += im.data.length;
+
+    // trim the oldest end, keeping the cursor aligned
+    while (history.length > 1 &&
+           (history.length > MAX_HISTORY || historyBytes > HISTORY_BUDGET)) {
+      historyBytes -= history.shift().data.length;
+      histIndex--;
+    }
+    syncButtons();
+  }
+
+  function restoreSnapshot(im) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.putImageData(im, 0, 0);
+    ctx.restore();
+  }
+
+  function undo() {
+    if (!ready || histIndex <= 0) {
+      if (Forge.UI) Forge.UI.toast('Nothing left to undo');
+      return false;
+    }
+    histIndex--;
+    restoreSnapshot(history[histIndex]);
+    syncButtons();
+    return true;
+  }
+
+  function redo() {
+    if (!ready || histIndex >= history.length - 1) {
+      if (Forge.UI) Forge.UI.toast('Nothing to redo');
+      return false;
+    }
+    histIndex++;
+    restoreSnapshot(history[histIndex]);
+    syncButtons();
+    return true;
+  }
+
+  function canUndo() { return ready && histIndex > 0; }
+  function canRedo() { return ready && histIndex < history.length - 1; }
+
+  /* ~~~~~~~~~~~~~~~~ setup ~~~~~~~~~~~~~~~~ */
 
   function attach(canvasEl, wrapEl, ringEl) {
     canvas = canvasEl; wrap = wrapEl; ring = ringEl;
@@ -1100,6 +1305,7 @@ Forge.Engine = (function () {
 
     resize();
     ready = true;
+    pushSnapshot(); // floor of the stack: the blank canvas
   }
 
   function resize() {
@@ -1124,7 +1330,7 @@ Forge.Engine = (function () {
     if (prev) ctx.drawImage(prev, 0, 0, w, h);
   }
 
-  /* ---------------- pointer I/O ---------------- */
+  /* ~~~~~~~~~~~~~~~~ pointer I/O ~~~~~~~~~~~~~~~~ */
 
   function pos(e) {
     const r = canvas.getBoundingClientRect();
@@ -1140,17 +1346,19 @@ Forge.Engine = (function () {
     const p = pos(e);
     lastPointer = p; placeRing(p);
     drawing = true;
+    strokeDirty = false;
     lastPos = p;
     speed = 0;
     lastMoveTime = e.timeStamp;
-    pushHistory(); // pre-stroke snapshot
 
     if (S().mode === 'stamp') {
       stampAt(p);
+      strokeDirty = true;
       spacingCarry = stampSpacing();
     } else {
       Forge.Flow.resetStroke();
       withSymmetry(() => Forge.Flow.drawDot(ctx, p, Forge.Flow.colorAt(0)));
+      strokeDirty = true;
     }
   }
 
@@ -1161,7 +1369,8 @@ Forge.Engine = (function () {
 
     const dt = Math.max(1, e.timeStamp - lastMoveTime);
     const d = Math.hypot(p.x - lastPos.x, p.y - lastPos.y);
-    speed = speed * 0.6 + (d / dt) * 0.4; // smoothed px/ms
+    if (d > 0) strokeDirty = true;
+    speed = speed * 0.6 + (d / dt) * 0.4; // smoothed px per ms
     lastMoveTime = e.timeStamp;
 
     if (S().mode === 'stamp') stampSegment(lastPos, p);
@@ -1171,19 +1380,21 @@ Forge.Engine = (function () {
   }
 
   function onUp(e) {
+    if (drawing && strokeDirty) pushSnapshot(); // one snapshot per finished stroke
     drawing = false;
+    strokeDirty = false;
     try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
   }
 
-  /* ---------------- pressure simulation ---------------- */
+  /* ~~~~~~~~~~~~~~~~ pressure simulation ~~~~~~~~~~~~~~~~ */
 
   function pressure() {
-    // 1 at rest → drops toward 0 as pointer speed approaches MAX_SPEED
+    // 1 at rest, drops toward 0 as the pointer approaches MAX_SPEED
     return 1 - S().pressureSens * clamp(speed / S().MAX_SPEED, 0, 1);
   }
 
-  /* ---------------- symmetry ----------------
-     Every draw call is re-run under each transform, same frame. */
+  /* ~~~~~~~~~~~~~~~~ symmetry ~~~~~~~~~~~~~~~~
+     every draw call re-runs under each transform, same frame */
   function withSymmetry(fn) {
     const st = S();
     if (st.symmetryMode === 'off') { fn(); return; }
@@ -1197,7 +1408,7 @@ Forge.Engine = (function () {
       return;
     }
 
-    // radial — N copies rotated around canvas center
+    // radial · N copies rotated around the canvas center
     const n = Math.max(2, Math.round(st.symmetryCount));
     for (let i = 0; i < n; i++) {
       ctx.save();
@@ -1211,7 +1422,7 @@ Forge.Engine = (function () {
     }
   }
 
-  /* ---------------- STAMP ENGINE ---------------- */
+  /* ~~~~~~~~~~~~~~~~ stamp engine ~~~~~~~~~~~~~~~~ */
 
   function stampSpacing() {
     return Math.max(0.5, S().spacing * S().size);
@@ -1265,7 +1476,7 @@ Forge.Engine = (function () {
     return (tintedValid && st.color && st.color.toLowerCase() !== '#ffffff') ? tinted : st.tipCanvas;
   }
 
-  /* COLOR swatch tints the tip (multiply keeps shading, white = no-op). */
+  /* the color swatch tints the tip (multiply keeps shading, white is a no-op) */
   function rebuildTintedTip() {
     const st = S();
     if (!st.tipCanvas) return;
@@ -1283,7 +1494,7 @@ Forge.Engine = (function () {
     tintedValid = true;
   }
 
-  /* ---------------- brush ring ---------------- */
+  /* ~~~~~~~~~~~~~~~~ brush ring ~~~~~~~~~~~~~~~~ */
 
   function placeRing(p) {
     if (!ring) return;
@@ -1299,43 +1510,23 @@ Forge.Engine = (function () {
     ring.style.height = sz + 'px';
   }
 
-  /* ---------------- undo ---------------- */
-
-  function pushHistory() {
-    let im;
-    try { im = ctx.getImageData(0, 0, canvas.width, canvas.height); }
-    catch (_) { return; }
-    history.push(im);
-    historyBytes += im.data.length;
-    while (history.length > MAX_HISTORY ||
-           (history.length > 1 && historyBytes > HISTORY_BUDGET)) {
-      historyBytes -= history.shift().data.length;
-    }
-  }
-
-  function undo() {
-    if (!ready) return;
-    const im = history.pop();
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (im) ctx.putImageData(im, 0, 0);
-    else ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
-  }
+  /* ~~~~~~~~~~~~~~~~ clear ~~~~~~~~~~~~~~~~ */
 
   function clearCanvas() {
     if (!ready) return;
-    pushHistory(); // so Ctrl+Z brings it back
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
+    pushSnapshot(); // clearing is undoable like anything else
+    if (Forge.UI) Forge.UI.toast('Canvas cleared');
   }
 
-  /* ---------------- public API ---------------- */
+  /* ~~~~~~~~~~~~~~~~ public api ~~~~~~~~~~~~~~~~ */
 
   return {
-    attach, resize, undo, clear: clearCanvas,
+    attach, resize, undo, redo, clear: clearCanvas,
+    canUndo, canRedo,
     updateRing, rebuildTintedTip, pressure,
     context: () => ctx,
     canvasEl: () => canvas,
@@ -1352,14 +1543,18 @@ Forge.Engine = (function () {
 
 Forge.Export = {
   download(blob, name) {
-    const a = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    try {
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (_) {
+      Forge.UI.toast('Download blocked here, try a normal browser tab');
+    }
   },
 
   slug() { return Forge.slug(Forge.state.tipName); },
@@ -1406,7 +1601,9 @@ Forge.Export = {
     const SIZE = 128;
     const px = this.tip128().getContext('2d').getImageData(0, 0, SIZE, SIZE).data;
     const name = this.slug().slice(0, 63);
-    const nameBytes = new TextEncoder().encode(name);
+    // the slug is ascii by construction, so byte-wise copy is safe
+    const nameBytes = new Uint8Array(name.length);
+    for (let i = 0; i < name.length; i++) nameBytes[i] = name.charCodeAt(i) & 0x7F;
 
     const headerSize = 28 + nameBytes.length + 1;
     const buf = new ArrayBuffer(headerSize + px.length);
@@ -1612,7 +1809,7 @@ Forge.Share = {
 <script>
 /* ~~~ js/ui.js ~~~ */
 /* ============================================================
-   forge · ui.js · panels, sliders, upload, splitter, toasts
+   forge · ui.js · panels, sliders, upload, png maker, toasts
    ============================================================ */
 
 Forge.UI = (function () {
@@ -1755,6 +1952,55 @@ Forge.UI = (function () {
     document.body.dataset.sym = sym;
     document.querySelectorAll('.sym-seg button').forEach(b =>
       b.classList.toggle('active', b.dataset.sym === sym));
+  }
+
+  /* ~~~~~~~~~~~~~~~~ undo / redo buttons ~~~~~~~~~~~~~~~~ */
+
+  function syncHistoryButtons() {
+    const u = $('undoBtn'), r = $('redoBtn');
+    if (u) u.disabled = !Forge.Engine.canUndo();
+    if (r) r.disabled = !Forge.Engine.canRedo();
+  }
+
+  /* ~~~~~~~~~~~~~~~~ png maker (cutout) ~~~~~~~~~~~~~~~~ */
+
+  function refreshCutTol() {
+    const inp = $('cutTol');
+    $('cutTolVal').textContent = Math.round(+inp.value * 100) + '%';
+    inp.style.setProperty('--fill', ((+inp.value - 0.02) / 0.98) * 100 + '%');
+  }
+
+  function applyTipCanvas(c, msg) {
+    S().tipCanvas = c;
+    Forge.Engine.rebuildTintedTip();
+    Forge.Flow.samplePalette(c);
+    Forge.UI.onTipChanged();
+    if (msg) Forge.UI.toast(msg);
+  }
+
+  function wireCutout() {
+    const pv = $('tipPreviewCanvas');
+
+    pv.addEventListener('click', e => {
+      if (!S().tipCanvas) { toast('Load a tip first, then tap a color here'); return; }
+      if (!Forge.Cutout.hasOriginal()) return;
+      const r = pv.getBoundingClientRect();
+      const nx = (e.clientX - r.left) * (256 / Math.max(1, r.width));
+      const ny = (e.clientY - r.top) * (256 / Math.max(1, r.height));
+      const tol = parseFloat($('cutTol').value);
+      const out = Forge.Cutout.eraseAt(nx, ny, tol);
+      if (!out) { toast('That spot is already empty, try a colored area'); return; }
+      applyTipCanvas(out, 'Background erased, your PNG is ready to export');
+    });
+
+    $('cutTol').addEventListener('input', refreshCutTol);
+
+    $('cutResetBtn').addEventListener('click', () => {
+      if (!Forge.Cutout.hasOriginal()) { toast('Load a tip first'); return; }
+      applyTipCanvas(Forge.Cutout.restore(), 'Original image back');
+    });
+
+    refreshCutTol();
   }
 
   /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
@@ -1992,6 +2238,16 @@ Forge.UI = (function () {
     toastTimer = setTimeout(() => t.classList.remove('show'), 2300);
   }
 
+  /* ~~~~~~~~~~~~~~~~ preview canvas ~~~~~~~~~~~~~~~~ */
+
+  function drawPreview() {
+    const pv = $('tipPreviewCanvas');
+    if (!pv) return;
+    const x = pv.getContext('2d');
+    x.clearRect(0, 0, pv.width, pv.height);
+    if (S().tipCanvas) x.drawImage(S().tipCanvas, 0, 0, pv.width, pv.height);
+  }
+
   /* ~~~~~~~~~~~~~~~~ refresh (used by URL restore) ~~~~~~~~~~~~~~~~ */
 
   function refreshAll() {
@@ -2015,14 +2271,15 @@ Forge.UI = (function () {
     $('canvasWrap').style.background = S().bg;
     drawPaletteStrip();
     Forge.Engine.updateRing();
+    syncHistoryButtons();
     if (S().tipCanvas) onTipChanged();
   }
 
   function onTipChanged() {
     const S = Forge.state;
     if (!S.tipCanvas) return;
-    $('tipPreviewImg').src = S.tipCanvas.toDataURL();
     $('tipNameLabel').textContent = S.tipName || 'no tip yet';
+    drawPreview();
     drawPaletteStrip();
     Forge.Engine.updateRing();
   }
@@ -2035,6 +2292,7 @@ Forge.UI = (function () {
     buildStarterTips();
     wireUpload();
     wireModal();
+    wireCutout();
     initSplitter();
     renderSaved();
 
@@ -2046,6 +2304,7 @@ Forge.UI = (function () {
 
     $('clearBtn').addEventListener('click', () => Forge.Engine.clear());
     $('undoBtn').addEventListener('click', () => Forge.Engine.undo());
+    $('redoBtn').addEventListener('click', () => Forge.Engine.redo());
 
     $('colorInput').addEventListener('input', e => {
       S().color = e.target.value;
@@ -2065,19 +2324,25 @@ Forge.UI = (function () {
     $('shareBtn').addEventListener('click', () => Forge.Share.share());
 
     window.addEventListener('keydown', e => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) {
         e.preventDefault();
         Forge.Engine.undo();
+      } else if (((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey)))) {
+        e.preventDefault();
+        Forge.Engine.redo();
       }
     });
 
     $('colorSwatch').style.background = S().color;
     $('bgSwatch').style.background = S().bg;
+    syncHistoryButtons();
   }
 
   return {
     init, toast, renderSaved, refreshAll, onTipChanged, copyText,
-    setMode, setSym, loadStarterTip, drawPaletteStrip
+    setMode, setSym, loadStarterTip, drawPaletteStrip,
+    syncHistoryButtons
   };
 })();
 
@@ -2085,11 +2350,12 @@ Forge.UI = (function () {
 <script>
 /* ~~~ js/main.js ~~~ */
 /* ============================================================
-   FORGE — main.js — bootstrap
+   forge · main.js · bootstrap
    ============================================================ */
 
-/* Central "load a tip" routine: normalize to 256×256 (contain-fit,
-   alpha preserved), resample the flow palette, refresh the UI. */
+/* Central "load a tip" routine: normalize to 256x256 (contain fit,
+   alpha preserved), keep a pristine copy for the png maker, resample
+   the flow palette, refresh the UI. */
 Forge.setTip = function (source, name) {
   const S = Forge.state;
   const N = 256;
@@ -2107,6 +2373,8 @@ Forge.setTip = function (source, name) {
 
   S.tipCanvas = c;
   S.tipName = name || S.tipName || 'brush';
+
+  if (Forge.Cutout) Forge.Cutout.setOriginal(c);
 
   Forge.Engine.rebuildTintedTip();
   Forge.Flow.samplePalette(c);
@@ -2143,13 +2411,35 @@ Forge.setTip = function (source, name) {
 
 </script>
 <script>
-window.addEventListener('load', function () {
-  setTimeout(function () {
-    var ok = window.Forge && Forge.Engine && Forge.Engine.ready && Forge.Engine.ready();
+(function () {
+  var tries = 0;
+  function check() {
+    tries++;
+    var f = window.Forge;
+    var ready = !!(f && f.Engine && f.Engine.ready && f.Engine.ready());
     var el = document.getElementById('bootWarning');
-    if (el) el.style.display = ok ? 'none' : 'block';
-  }, 1200);
-});
+    if (!el) return;
+    if (ready) { el.style.display = 'none'; return; }
+    if (tries < 20) { setTimeout(check, 400); return; }
+
+    var mods = [['state.js', 'state'], ['starter-tips.js', 'StarterTips'],
+                ['cutout.js', 'Cutout'], ['flow-mode.js', 'Flow'],
+                ['brush-engine.js', 'Engine'], ['export.js', 'Export'],
+                ['share.js', 'Share'], ['ui.js', 'UI']];
+    var lines = [];
+    for (var i = 0; i < mods.length; i++) {
+      var ok = f && f[mods[i][1]] !== undefined;
+      lines.push((ok ? 'ok: ' : 'MISSING: ') + mods[i][0]);
+    }
+    var detail = lines.join(', ');
+    if (window.__forgeError) detail += ', first error: ' + window.__forgeError;
+    el.textContent = 'forge did not fully load. ' + detail +
+      '. If you are viewing a locked preview, download the whole folder (keep the js folder next to index.html) and open index.html in your browser, or run python3 -m http.server in that folder and open http://localhost:8000';
+    el.style.display = 'block';
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', check);
+  else check();
+})();
 </script>
 </body>
 </html>

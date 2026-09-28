@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>forge · turn images into brushes</title>
 <meta name="description" content="Turn any image into a digital brush. Paint with its colors, test it live, export to GIMP and Krita.">
+<meta name="theme-color" content="#fdf9f0">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23ffd66e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Comic%20Sans%20MS,cursive'%20font-size='19'%20font-weight='bold'%20fill='%234a4136'%20text-anchor='middle'%3Ef%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-mode="stamp" data-sym="off">
@@ -31,8 +33,18 @@
     <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" hidden>
 
     <div class="preview-block">
-      <div class="tip-preview"><img id="tipPreviewImg" alt="brush tip preview"></div>
+      <div class="tip-preview"><canvas id="tipPreviewCanvas" width="256" height="256" title="Click a color to erase it"></canvas></div>
       <div class="tip-name" id="tipNameLabel">no tip yet</div>
+    </div>
+
+    <div class="cutout-block" id="cutoutBlock">
+      <div class="section-label dot-pink">Png maker</div>
+      <div class="cutout-hint">Click a color on the image above to erase it. Flat backgrounds come out clean, ready to export as a transparent PNG.</div>
+      <div class="row">
+        <div class="row-top"><label for="cutTol">Eraser reach</label><span class="val" id="cutTolVal">15%</span></div>
+        <input type="range" id="cutTol" min="0.02" max="1" step="0.01" value="0.15">
+      </div>
+      <button class="btn" id="cutResetBtn">Bring the original back</button>
     </div>
 
     <div class="section-label dot-yellow">Starter tips</div>
@@ -103,6 +115,7 @@
         <span class="bar-spacer"></span>
         <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
         <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
         <label class="tbtn" title="Stamp tint color">
           Color<span class="swatch" id="colorSwatch"></span>
           <input type="color" id="colorInput" value="#ffffff">
@@ -134,9 +147,7 @@
 
 <!-- shown only if the scripts below fail to load (sandboxed previews block them) -->
 <div class="boot-warning" id="bootWarning">
-  forge could not fully load here. If you are viewing a locked preview, download the
-  folder and open <b>index.html</b> in your browser, or serve it with
-  <b>python3 -m http.server</b>.
+  forge is still loading, one moment.
 </div>
 <noscript>
   <div class="boot-warning">forge needs JavaScript to draw. Please enable it and reload.</div>
@@ -153,6 +164,7 @@ window.addEventListener('error', function (e) {
 </script>
 <script src="js/state.js"></script>
 <script src="js/starter-tips.js"></script>
+<script src="js/cutout.js"></script>
 <script src="js/flow-mode.js"></script>
 <script src="js/brush-engine.js"></script>
 <script src="js/export.js"></script>
@@ -160,13 +172,35 @@ window.addEventListener('error', function (e) {
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
 <script>
-window.addEventListener('load', function () {
-  setTimeout(function () {
-    var ok = window.Forge && Forge.Engine && Forge.Engine.ready && Forge.Engine.ready();
+(function () {
+  var tries = 0;
+  function check() {
+    tries++;
+    var f = window.Forge;
+    var ready = !!(f && f.Engine && f.Engine.ready && f.Engine.ready());
     var el = document.getElementById('bootWarning');
-    if (el) el.style.display = ok ? 'none' : 'block';
-  }, 1200);
-});
+    if (!el) return;
+    if (ready) { el.style.display = 'none'; return; }
+    if (tries < 20) { setTimeout(check, 400); return; }
+
+    var mods = [['state.js', 'state'], ['starter-tips.js', 'StarterTips'],
+                ['cutout.js', 'Cutout'], ['flow-mode.js', 'Flow'],
+                ['brush-engine.js', 'Engine'], ['export.js', 'Export'],
+                ['share.js', 'Share'], ['ui.js', 'UI']];
+    var lines = [];
+    for (var i = 0; i < mods.length; i++) {
+      var ok = f && f[mods[i][1]] !== undefined;
+      lines.push((ok ? 'ok: ' : 'MISSING: ') + mods[i][0]);
+    }
+    var detail = lines.join(', ');
+    if (window.__forgeError) detail += ', first error: ' + window.__forgeError;
+    el.textContent = 'forge did not fully load. ' + detail +
+      '. If you are viewing a locked preview, download the whole folder (keep the js folder next to index.html) and open index.html in your browser, or run python3 -m http.server in that folder and open http://localhost:8000';
+    el.style.display = 'block';
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', check);
+  else check();
+})();
 </script>
 </body>
 </html>
