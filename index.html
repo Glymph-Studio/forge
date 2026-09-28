@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGE — image → brush · Glymph Studio</title>
+<meta name="description" content="Forge turns any image into a configurable digital brush you can test live and export to real drawing apps.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20fill='%23000'/%3E%3Ctext%20x='16'%20y='23'%20font-family='monospace'%20font-size='20'%20font-weight='bold'%20fill='%23c8ff00'%20text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="stamp" data-sym="off">
+
+<!-- ============ SMALL SCREEN BLOCKER ============ -->
+<div class="blocker">
+  <div class="blocker-wordmark">FORGE</div>
+  <div class="blocker-msg">Forge is built for big screens.<br>Open on a laptop.</div>
+  <div class="blocker-studio">— GLYMPH STUDIO —</div>
+</div>
+
+<div class="app">
+
+  <!-- ============ PANEL 1 · LEFT ============ -->
+  <aside class="panel left">
+    <header class="wordmark">FORGE<span class="cursor-block"></span><em>by GLYMPH STUDIO</em></header>
+
+    <div class="upload-zone" id="uploadZone">
+      <span class="uz-title">UPLOAD BRUSH TIP</span>
+      <span class="uz-sub">PNG · JPG · SVG<br>click or drop — or drop a starter tip</span>
+    </div>
+    <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" hidden>
+
+    <div class="preview-block">
+      <div class="tip-preview"><img id="tipPreviewImg" alt="brush tip preview"></div>
+      <div class="tip-name" id="tipNameLabel">—</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="mode-toggle">
+      <span class="mode-label">MODE:</span>
+      <div class="mode-seg">
+        <button id="modeStamp" class="active" title="Stamp the image along the stroke">STAMP</button>
+        <button id="modeFlow" title="Smear the image's palette along the stroke">FLOW</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-label">STARTER TIPS</div>
+    <div class="tips-grid" id="tipsGrid"></div>
+
+    <div class="divider"></div>
+
+    <div class="section-label">SAVED BRUSHES</div>
+    <div class="saved-list" id="savedList"></div>
+  </aside>
+
+  <!-- ============ PANEL 2 · MIDDLE ============ -->
+  <section class="panel mid">
+
+    <div class="section-label only-stamp">STAMP ENGINE</div>
+    <div id="groupStamp" class="group only-stamp"></div>
+
+    <div class="section-label only-flow">FLOW ENGINE</div>
+    <div class="only-flow">
+      <div class="palette-wrap">
+        <canvas id="paletteStrip" class="palette-strip" width="256" height="10"></canvas>
+        <div class="palette-hint">palette sampled from brush tip — colors bleed in this order as you draw</div>
+      </div>
+    </div>
+    <div id="groupFlow" class="group only-flow"></div>
+
+    <div class="section-label">SHARED</div>
+    <div id="groupShared" class="group"></div>
+
+    <div class="section-label">SYMMETRY</div>
+    <div class="seg sym-seg">
+      <button data-sym="off" class="active">OFF</button>
+      <button data-sym="mirror">MIRROR</button>
+      <button data-sym="radial">RADIAL</button>
+    </div>
+    <div id="groupRadial" class="group only-radial"></div>
+
+    <div class="divider"></div>
+
+    <div class="section-label">EXPORT</div>
+    <button class="btn" id="exportTipPng">EXPORT BRUSH TIP PNG</button>
+    <button class="btn" id="exportGbr">EXPORT .GBR — GIMP</button>
+    <button class="btn" id="exportKpp">EXPORT .KPP — KRITA</button>
+    <button class="btn" id="exportCanvasPng">EXPORT CANVAS PNG</button>
+
+    <div class="divider"></div>
+
+    <button class="btn primary" id="shareBtn">SHARE THIS BRUSH ↗</button>
+  </section>
+
+  <!-- ============ PANEL 3 · RIGHT · CANVAS ============ -->
+  <section class="panel right" id="canvasPanel">
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="canvas"></canvas>
+      <div class="brush-ring" id="brushRing"></div>
+
+      <div class="canvas-topbar">
+        <button class="tbtn" id="clearBtn" title="Wipe the canvas">CLEAR</button>
+        <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">UNDO</button>
+        <label class="tbtn" title="Stamp tint color (Stamp mode)">
+          COLOR<span class="swatch" id="colorSwatch"></span>
+          <input type="color" id="colorInput" value="#ffffff">
+        </label>
+        <label class="tbtn" title="Canvas background">
+          BG<span class="swatch" id="bgSwatch"></span>
+          <input type="color" id="bgInput" value="#111111">
+        </label>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ SHARE MODAL (clipboard fallback + manual copy) ============ -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <div class="modal-title">// SHARE THIS BRUSH</div>
+    <input type="text" id="shareUrlInput" readonly spellcheck="false">
+    <div class="modal-hint">The full brush — tip image and every setting — is encoded in this URL. Anyone who opens it gets your brush instantly. No backend. No accounts.</div>
+    <div class="modal-actions">
+      <button class="btn primary" id="shareCopyBtn">COPY LINK</button>
+      <button class="btn" id="shareCloseBtn">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="js/state.js"></script>
+<script src="js/starter-tips.js"></script>
+<script src="js/flow-mode.js"></script>
+<script src="js/brush-engine.js"></script>
+<script src="js/export.js"></script>
+<script src="js/share.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
