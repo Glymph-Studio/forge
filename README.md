@@ -1,63 +1,64 @@
-# FORGE — by Glymph Studio
+# forge 🖍️
 
-Turn any image into a configurable digital brush. Test it live. Export it to real drawing apps.
+Turn any image into a digital brush. Paint with it right in the browser, then take it
+to GIMP or Krita. Made by [Glymph Studio](https://github.com/Glymph-Studio).
 
-Two engines, one tip:
+Two engines live under one brush tip:
 
-- **STAMP** — classical stamp-along-path. Spacing, size jitter, scatter, rotation (or random), opacity, count.
-- **FLOW** — the headline. Forge samples the image's palette **in sequence** and smears those exact colors along your stroke, like dragging wet paint made of the image's pigments. The image is the palette — not a filter, not a recolor.
+- **Stamp** is the classic: the tip gets stamped along your stroke with control over
+  spacing, size, jitter, scatter, rotation and opacity.
+- **Flow** is the fun one: forge reads the colors of your image in order and smears
+  them along the stroke, like dragging wet paint made from that image's pigments.
+  The image is the palette, not a filter.
 
 ## Run it
 
 ```bash
-cd forge
 python3 -m http.server 8000
-# → http://localhost:8000
+# then open http://localhost:8000
 ```
 
-(Opening `index.html` directly also works; internet is only needed for fonts + JSZip CDN.)
+Double clicking `index.html` works too. You need internet the first time for fonts
+and the zip library.
 
-## Deploy
+## Things to try
 
-Static. No backend, no build step. Drop the `forge/` folder on Vercel / Netlify / GitHub Pages and you're live.
-
-## Files
-
-```
-index.html          layout — 3 panels, mobile blocker, share modal
-style.css           dark terminal theme, electric lime #c8ff00
-js/state.js         shared settings + helpers
-js/starter-tips.js  8 programmatic brush tips (no external images)
-js/flow-mode.js     palette sampling + smear engine (headline feature)
-js/brush-engine.js  canvas manager, stamp engine, symmetry, undo, pointer I/O
-js/export.js        PNG tip · GIMP .gbr (hand-built binary) · Krita .kpp (JSZip) · canvas PNG
-js/share.js         brush ⇄ URL-hash encoding + saved brush list
-js/ui.js            sliders, toggles, upload zone, toasts
-js/main.js          bootstrap
-```
-
-## Controls
-
-- Draw: pointer / touch / stylus (Pointer Events only)
-- `Ctrl+Z` / UNDO — 20-step history
-- CLEAR / UNDO / COLOR (stamp tint) / BG — top-right over the canvas
-- SYMMETRY — OFF · MIRROR · RADIAL (2–8 copies), applied live
-- Starter tips: click to load, **or drag onto the upload zone**
-- SHARE THIS BRUSH — encodes the full brush (tip image + every setting) into the URL hash and copies the link
+- Drop any photo into the upload zone, switch to **Flow**, and draw. The stroke
+  bleeds the photo's colors in order.
+- Drag the little handle between the panels to make the canvas wider or narrower.
+- On phones the canvas docks to the top and stays there while you scroll the tools.
+- Tap **Share this brush** and send the link to someone. The whole brush, tip image
+  included, is encoded inside the link.
+- **Mirror** and **Radial** symmetry apply while you draw, same frame.
+- Starter tips are draggable straight onto the upload zone.
 
 ## Exports
 
-| Format | What |
+| File | What it is |
 | --- | --- |
-| `*-brush-tip.png` | tip resampled to 128×128 |
-| `.gbr` | GIMP brush v2, big-endian, `GIMP` magic + spacing field, raw RGBA body — built byte-by-byte with `DataView` |
-| `.kpp` | Krita preset — ZIP (JSZip) containing `name.png` + preset XML |
-| `forge-canvas.png` | flattened canvas (background + art) |
+| tip PNG | the brush tip at 128x128 |
+| `.gbr` | GIMP brush, version 2 binary written byte by byte, drops into your brushes folder |
+| `.kpp` | Krita preset, a zip with the tip PNG and the preset XML |
+| canvas PNG | your artwork flattened on its background |
 
-## Notes
+## The code
 
-- GIMP: drop the `.gbr` into `~/.config/GIMP/2.10/brushes/` (or Brushes → Import).
-- Krita: drop the `.kpp` + `.png` into `~/.local/share/krita/brushes/` (Linux) or the equivalent presets folder, then restart Krita.
-- Shared links carry the tip inside the hash — nothing is uploaded anywhere.
+```
+index.html          layout
+style.css           crayon theme, responsive rules
+js/state.js         shared settings
+js/starter-tips.js  eight tips drawn in code at load
+js/flow-mode.js     palette sampling and the smear engine
+js/brush-engine.js  canvas, stamp engine, symmetry, undo, pointer input
+js/export.js        PNG, GBR, KPP and canvas export
+js/share.js         brush to URL encoding and the saved list
+js/ui.js            sliders, upload, splitter, toasts
+js/main.js          boot
+```
 
-FORGE — *the image is the palette.*
+No framework, no build step. Vanilla JS and the Pointer Events API, so mouse, touch
+and stylus all work. Deploy anywhere static: Vercel, Netlify, GitHub Pages.
+
+## License
+
+MIT

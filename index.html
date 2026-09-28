@@ -3,116 +3,113 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FORGE — image → brush · Glymph Studio</title>
-<meta name="description" content="Forge turns any image into a configurable digital brush you can test live and export to real drawing apps.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20fill='%23000'/%3E%3Ctext%20x='16'%20y='23'%20font-family='monospace'%20font-size='20'%20font-weight='bold'%20fill='%23c8ff00'%20text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<title>forge · turn images into brushes</title>
+<meta name="description" content="Turn any image into a digital brush. Paint with its colors, test it live, export to GIMP and Krita.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23ffd66e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Comic%20Sans%20MS,cursive'%20font-size='19'%20font-weight='bold'%20fill='%234a4136'%20text-anchor='middle'%3Ef%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-mode="stamp" data-sym="off">
 
-<!-- ============ SMALL SCREEN BLOCKER ============ -->
-<div class="blocker">
-  <div class="blocker-wordmark">FORGE</div>
-  <div class="blocker-msg">Forge is built for big screens.<br>Open on a laptop.</div>
-  <div class="blocker-studio">— GLYMPH STUDIO —</div>
-</div>
+<div class="app" id="app">
 
-<div class="app">
-
-  <!-- ============ PANEL 1 · LEFT ============ -->
+  <!-- ~~~~~~~~~~ left: source material ~~~~~~~~~~ -->
   <aside class="panel left">
-    <header class="wordmark">FORGE<span class="cursor-block"></span><em>by GLYMPH STUDIO</em></header>
+    <header class="wordmark">
+      forge
+      <svg class="squiggle" viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6 Q 12 1, 24 5 T 46 5 T 68 5 T 90 5 T 118 4" fill="none" stroke="var(--red)" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </header>
 
-    <div class="upload-zone" id="uploadZone">
-      <span class="uz-title">UPLOAD BRUSH TIP</span>
-      <span class="uz-sub">PNG · JPG · SVG<br>click or drop — or drop a starter tip</span>
+    <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Upload brush tip image">
+      <span class="uz-title">Upload brush tip</span>
+      <span class="uz-sub">PNG · JPG · SVG<br>click or drop, or tap a starter tip</span>
     </div>
     <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" hidden>
 
     <div class="preview-block">
       <div class="tip-preview"><img id="tipPreviewImg" alt="brush tip preview"></div>
-      <div class="tip-name" id="tipNameLabel">—</div>
+      <div class="tip-name" id="tipNameLabel">no tip yet</div>
     </div>
 
-    <div class="divider"></div>
-
-    <div class="mode-toggle">
-      <span class="mode-label">MODE:</span>
-      <div class="mode-seg">
-        <button id="modeStamp" class="active" title="Stamp the image along the stroke">STAMP</button>
-        <button id="modeFlow" title="Smear the image's palette along the stroke">FLOW</button>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="section-label">STARTER TIPS</div>
+    <div class="section-label dot-yellow">Starter tips</div>
     <div class="tips-grid" id="tipsGrid"></div>
 
-    <div class="divider"></div>
-
-    <div class="section-label">SAVED BRUSHES</div>
+    <div class="section-label dot-green">Saved brushes</div>
     <div class="saved-list" id="savedList"></div>
+
+    <footer class="credit">
+      made with <span aria-hidden="true">🖍️</span> by
+      <a href="https://github.com/Glymph-Studio" target="_blank" rel="noopener">Glymph Studio</a>
+    </footer>
   </aside>
 
-  <!-- ============ PANEL 2 · MIDDLE ============ -->
+  <!-- ~~~~~~~~~~ middle: brush settings ~~~~~~~~~~ -->
   <section class="panel mid">
+    <div class="mode-seg" role="group" aria-label="Brush mode">
+      <button data-mode-btn="stamp" class="active">Stamp</button>
+      <button data-mode-btn="flow">Flow</button>
+    </div>
 
-    <div class="section-label only-stamp">STAMP ENGINE</div>
+    <div class="section-label dot-red only-stamp">Stamp engine</div>
     <div id="groupStamp" class="group only-stamp"></div>
 
-    <div class="section-label only-flow">FLOW ENGINE</div>
     <div class="only-flow">
+      <div class="section-label dot-blue">Flow engine</div>
       <div class="palette-wrap">
-        <canvas id="paletteStrip" class="palette-strip" width="256" height="10"></canvas>
-        <div class="palette-hint">palette sampled from brush tip — colors bleed in this order as you draw</div>
+        <canvas id="paletteStrip" class="palette-strip" width="256" height="12"></canvas>
+        <div class="palette-hint">colors from your tip, in order, smeared as you draw</div>
       </div>
+      <div id="groupFlow" class="group"></div>
     </div>
-    <div id="groupFlow" class="group only-flow"></div>
 
-    <div class="section-label">SHARED</div>
+    <div class="section-label dot-purple">Shared</div>
     <div id="groupShared" class="group"></div>
 
-    <div class="section-label">SYMMETRY</div>
-    <div class="seg sym-seg">
-      <button data-sym="off" class="active">OFF</button>
-      <button data-sym="mirror">MIRROR</button>
-      <button data-sym="radial">RADIAL</button>
+    <div class="section-label dot-pink">Symmetry</div>
+    <div class="seg sym-seg" role="group" aria-label="Symmetry">
+      <button data-sym="off" class="active">Off</button>
+      <button data-sym="mirror">Mirror</button>
+      <button data-sym="radial">Radial</button>
     </div>
     <div id="groupRadial" class="group only-radial"></div>
 
-    <div class="divider"></div>
+    <div class="section-label dot-orange">Export</div>
+    <button class="btn" id="exportTipPng">Export tip PNG</button>
+    <button class="btn" id="exportGbr">Export .GBR (GIMP)</button>
+    <button class="btn" id="exportKpp">Export .KPP (Krita)</button>
+    <button class="btn" id="exportCanvasPng">Export canvas PNG</button>
 
-    <div class="section-label">EXPORT</div>
-    <button class="btn" id="exportTipPng">EXPORT BRUSH TIP PNG</button>
-    <button class="btn" id="exportGbr">EXPORT .GBR — GIMP</button>
-    <button class="btn" id="exportKpp">EXPORT .KPP — KRITA</button>
-    <button class="btn" id="exportCanvasPng">EXPORT CANVAS PNG</button>
-
-    <div class="divider"></div>
-
-    <button class="btn primary" id="shareBtn">SHARE THIS BRUSH ↗</button>
+    <button class="btn primary" id="shareBtn">Share this brush ↗</button>
   </section>
 
-  <!-- ============ PANEL 3 · RIGHT · CANVAS ============ -->
+  <!-- ~~~~~~~~~~ drag to resize the canvas ~~~~~~~~~~ -->
+  <div class="splitter" id="splitter" title="Drag to resize the canvas" aria-hidden="true"><span></span></div>
+
+  <!-- ~~~~~~~~~~ right: the canvas ~~~~~~~~~~ -->
   <section class="panel right" id="canvasPanel">
     <div class="canvas-wrap" id="canvasWrap">
       <canvas id="canvas"></canvas>
       <div class="brush-ring" id="brushRing"></div>
 
       <div class="canvas-topbar">
-        <button class="tbtn" id="clearBtn" title="Wipe the canvas">CLEAR</button>
-        <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">UNDO</button>
-        <label class="tbtn" title="Stamp tint color (Stamp mode)">
-          COLOR<span class="swatch" id="colorSwatch"></span>
+        <div class="mode-seg mini" role="group" aria-label="Brush mode">
+          <button data-mode-btn="stamp" class="active">Stamp</button>
+          <button data-mode-btn="flow">Flow</button>
+        </div>
+        <span class="bar-spacer"></span>
+        <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
+        <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+        <label class="tbtn" title="Stamp tint color">
+          Color<span class="swatch" id="colorSwatch"></span>
           <input type="color" id="colorInput" value="#ffffff">
         </label>
         <label class="tbtn" title="Canvas background">
           BG<span class="swatch" id="bgSwatch"></span>
-          <input type="color" id="bgInput" value="#111111">
+          <input type="color" id="bgInput" value="#ffffff">
         </label>
       </div>
 
@@ -122,18 +119,28 @@
 
 </div>
 
-<!-- ============ SHARE MODAL (clipboard fallback + manual copy) ============ -->
+<!-- ~~~~~~~~~~ share modal ~~~~~~~~~~ -->
 <div class="modal-overlay" id="shareModal">
   <div class="modal">
-    <div class="modal-title">// SHARE THIS BRUSH</div>
+    <div class="modal-title">Share this brush</div>
     <input type="text" id="shareUrlInput" readonly spellcheck="false">
-    <div class="modal-hint">The full brush — tip image and every setting — is encoded in this URL. Anyone who opens it gets your brush instantly. No backend. No accounts.</div>
+    <div class="modal-hint">The whole brush, tip image and settings included, lives inside this link. Anyone who opens it gets your brush. No account, no upload.</div>
     <div class="modal-actions">
-      <button class="btn primary" id="shareCopyBtn">COPY LINK</button>
-      <button class="btn" id="shareCloseBtn">CLOSE</button>
+      <button class="btn primary" id="shareCopyBtn">Copy link</button>
+      <button class="btn" id="shareCloseBtn">Close</button>
     </div>
   </div>
 </div>
+
+<!-- shown only if the scripts below fail to load (sandboxed previews block them) -->
+<div class="boot-warning" id="bootWarning">
+  forge could not fully load here. If you are viewing a locked preview, download the
+  folder and open <b>index.html</b> in your browser, or serve it with
+  <b>python3 -m http.server</b>.
+</div>
+<noscript>
+  <div class="boot-warning">forge needs JavaScript to draw. Please enable it and reload.</div>
+</noscript>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="js/state.js"></script>
@@ -144,5 +151,14 @@
 <script src="js/share.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
+<script>
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    var ok = window.Forge && Forge.Engine && Forge.Engine.ready && Forge.Engine.ready();
+    var el = document.getElementById('bootWarning');
+    if (el) el.style.display = ok ? 'none' : 'block';
+  }, 1200);
+});
+</script>
 </body>
 </html>
