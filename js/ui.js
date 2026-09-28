@@ -193,6 +193,18 @@ Forge.UI = (function () {
     refreshCutTol();
   }
 
+  /* ~~~~~~~~~~~~~~~~ phone tabs ~~~~~~~~~~~~~~~~ */
+
+  function initMobileTabs() {
+    const btns = document.querySelectorAll('.mobile-tabs [data-mtab]');
+    btns.forEach(b => b.addEventListener('click', () => {
+      document.body.dataset.mtab = b.dataset.mtab;
+      btns.forEach(x => x.classList.toggle('active', x === b));
+    }));
+    document.querySelectorAll('[data-share]').forEach(b =>
+      b.addEventListener('click', () => Forge.Share.share()));
+  }
+
   /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
 
   function initSplitter() {
@@ -483,6 +495,7 @@ Forge.UI = (function () {
     wireUpload();
     wireModal();
     wireCutout();
+    initMobileTabs();
     initSplitter();
     renderSaved();
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>forge · turn images into brushes</title>
 <meta name="description" content="Turn any image into a digital brush. Paint with its colors, test it live, export to GIMP and Krita.">
 <meta name="theme-color" content="#fdf9f0">
@@ -507,62 +507,132 @@ body[data-sym="radial"] .only-radial{ display:block; }
 
 .tbtn:disabled{ opacity:.4; pointer-events:none; }
 
-.canvas-topbar .bar-spacer{ pointer-events:none; }
+/* ~~~~~~~~~~~~~~~~ mobile chrome (hidden on desktop) ~~~~~~~~~~~~~~~~ */
 
-/* ~~~~~~~~~~~~~~~~ phone + tablet ~~~~~~~~~~~~~~~~ */
+.mobile-head, .mobile-tabs{ display:none; }
+
+.canvas-actions{ display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
+
+/* ~~~~~~~~~~~~~~~~ phone + tablet · a real mobile layout ~~~~~~~~~~~~~~~~
+   header on top, canvas always in view, bottom tab bar, one tool pane
+   at a time. no horizontal anything. */
 
 @media (max-width: 960px){
 
-  html, body{ overflow:auto; height:auto; }
+  html, body{ height:100%; overflow:hidden; overscroll-behavior:none; }
 
   .app{
-    display:flex; flex-direction:column;
-    height:auto; overflow:visible;
+    flex-direction:column;
+    height:100vh; height:100dvh;
+    overflow:hidden;
   }
 
-  /* canvas first, sticky, always reachable */
+  /* compact header */
+  .mobile-head{
+    display:flex; align-items:center; justify-content:space-between;
+    flex:none; order:1;
+    padding:10px 14px 8px;
+  }
+  .m-word{
+    font-family:'Caveat','Comic Sans MS',cursive;
+    font-weight:700; font-size:27px; line-height:1; color:var(--ink);
+  }
+  .mobile-head .squiggle{ width:78px; height:8px; display:block; margin-top:2px; }
+
+  /* the canvas docks under the header and stays there */
   .panel.right{
-    order:1;
-    position:sticky; top:0;
-    height:54vh; min-height:320px;
-    z-index:20;
+    order:2; flex:none;
+    height:46vh; height:46dvh; min-height:270px;
     border-bottom:2px solid var(--line);
-    background:var(--panel);
   }
   .splitter{ display:none; }
-  .panel.left{ order:2; flex:none; width:auto; border-right:none; }
-  .panel.mid{ order:3; flex:none; width:auto; border-right:none; border-top:2px solid var(--line); }
 
-  .wordmark{ font-size:34px; padding-bottom:8px; }
-  .credit{ margin-top:6px; padding:18px 0 6px; }
+  /* mode toggle floats top left over the canvas */
+  .canvas-topbar{
+    left:10px; right:auto; top:10px;
+    pointer-events:none;
+  }
+  .canvas-topbar > *{ pointer-events:auto; }
 
-  .mode-seg.mini{ display:flex; }
+  /* actions float along the bottom of the canvas, thumb friendly */
+  .canvas-actions{
+    position:absolute; left:10px; right:10px; bottom:12px;
+    margin-left:0;
+    display:flex; justify-content:center; flex-wrap:wrap; gap:8px;
+    pointer-events:none;
+  }
+  .canvas-actions > *{ pointer-events:auto; }
+  .canvas-actions .tbtn{ box-shadow:0 3px 12px rgba(74,65,54,.16); }
+  .toast{ bottom:70px; }
 
-  .tips-grid{ grid-template-columns:repeat(8, 1fr); }
-  .tips-grid .tip-thumb:nth-child(n+9){ display:none; }
+  /* tool panes: one at a time, each scrolls on its own */
+  .panel.left, .panel.mid{
+    order:3; flex:1 1 0; min-height:0; width:auto;
+    border-right:none; border-top:none;
+    overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:16px 16px 28px;
+  }
+  .panel.left{ display:none; }
+  .panel.left .wordmark{ display:none; }
+  .panel.left .section-label:first-of-type{ margin-top:2px; }
+  .credit{ margin-top:20px; padding:12px 0 4px; }
 
-  .canvas-topbar{ left:10px; right:10px; top:10px; gap:6px; }
-  .tbtn{ padding:6px 11px; font-size:11.5px; }
-  .mode-seg.mini button{ padding:5px 10px; font-size:11px; }
+  body[data-mtab="image"]  .panel.left{ display:block; }
+  body[data-mtab="image"]  .panel.mid{ display:none; }
+  body[data-mtab="brush"]  .pane-export{ display:none; }
+  body[data-mtab="export"] .pane-brush{ display:none; }
+
+  .pane-export .btn{ padding:13px 12px; }
+
+  /* bottom tab bar */
+  .mobile-tabs{
+    display:flex; flex:none; order:4;
+    gap:6px;
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    background:var(--panel);
+    border-top:2px solid var(--line);
+  }
+  .mobile-tabs button{
+    flex:1; padding:12px 0;
+    font-size:13px; font-weight:800;
+    color:var(--muted);
+    background:var(--paper);
+    border-radius:99px;
+    transition:all .15s;
+  }
+  .mobile-tabs button.active[data-mtab="brush"]{ color:#fff; background:var(--red); box-shadow:0 2px 8px rgba(255,139,139,.5); }
+  .mobile-tabs button.active[data-mtab="image"]{ color:#fff; background:var(--green); box-shadow:0 2px 8px rgba(143,214,148,.5); }
+  .mobile-tabs button.active[data-mtab="export"]{ color:#fff; background:var(--blue); box-shadow:0 2px 8px rgba(124,195,247,.5); }
 }
 
 @media (max-width: 480px){
-  .tips-grid{ grid-template-columns:repeat(4, 1fr); }
-  .tips-grid .tip-thumb:nth-child(n+9){ display:block; }
-  .tbtn{ padding:6px 9px; }
-  .tbtn .swatch{ width:11px; height:11px; }
+  .canvas-actions .tbtn{ padding:8px 9px; font-size:11px; }
+  .canvas-actions .swatch{ width:11px; height:11px; }
+  .mode-seg.mini button{ padding:6px 9px; font-size:10.5px; }
+  .tbtn{ padding:6px 9px; font-size:11px; }
 }
 
-/* phones: sticky canvas + scrolling tools underneath.
-   drag from the little handle between the panels to make
-   the canvas wider or narrower on desktop. */
+/* phones: draw on top, pick your tools from the tabs below.
+   on desktop the little handle between the panels still resizes
+   the canvas horizontally. */
 /
 
 </style>
 </head>
-<body data-mode="stamp" data-sym="off">
+<body data-mode="stamp" data-sym="off" data-mtab="brush">
 
 <div class="app" id="app">
+
+  <!-- ~~~~~~~~~~ mobile header (phones only) ~~~~~~~~~~ -->
+  <header class="mobile-head">
+    <div class="m-brand">
+      <div class="m-word">forge</div>
+      <svg class="squiggle" viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6 Q 12 1, 24 5 T 46 5 T 68 5 T 90 5 T 118 4" fill="none" stroke="var(--red)" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <button class="tbtn" data-share>Share ↗</button>
+  </header>
 
   <!-- ~~~~~~~~~~ left: source material ~~~~~~~~~~ -->
   <aside class="panel left">
@@ -608,44 +678,47 @@ body[data-sym="radial"] .only-radial{ display:block; }
 
   <!-- ~~~~~~~~~~ middle: brush settings ~~~~~~~~~~ -->
   <section class="panel mid">
-    <div class="mode-seg" role="group" aria-label="Brush mode">
-      <button data-mode-btn="stamp" class="active">Stamp</button>
-      <button data-mode-btn="flow">Flow</button>
-    </div>
-
-    <div class="section-label dot-red only-stamp">Stamp engine</div>
-    <div id="groupStamp" class="group only-stamp"></div>
-
-    <div class="only-flow">
-      <div class="section-label dot-blue">Flow engine</div>
-      <div class="palette-wrap">
-        <canvas id="paletteStrip" class="palette-strip" width="256" height="12"></canvas>
-        <div class="palette-hint">colors from your tip, in order, smeared as you draw</div>
+    <div class="pane-brush">
+      <div class="mode-seg" role="group" aria-label="Brush mode">
+        <button data-mode-btn="stamp" class="active">Stamp</button>
+        <button data-mode-btn="flow">Flow</button>
       </div>
-      <div id="groupFlow" class="group"></div>
+
+      <div class="section-label dot-red only-stamp">Stamp engine</div>
+      <div id="groupStamp" class="group only-stamp"></div>
+
+      <div class="only-flow">
+        <div class="section-label dot-blue">Flow engine</div>
+        <div class="palette-wrap">
+          <canvas id="paletteStrip" class="palette-strip" width="256" height="12"></canvas>
+          <div class="palette-hint">colors from your tip, in order, smeared as you draw</div>
+        </div>
+        <div id="groupFlow" class="group"></div>
+      </div>
+
+      <div class="section-label dot-purple">Shared</div>
+      <div id="groupShared" class="group"></div>
+
+      <div class="section-label dot-pink">Symmetry</div>
+      <div class="seg sym-seg" role="group" aria-label="Symmetry">
+        <button data-sym="off" class="active">Off</button>
+        <button data-sym="mirror">Mirror</button>
+        <button data-sym="radial">Radial</button>
+      </div>
+      <div id="groupRadial" class="group only-radial"></div>
     </div>
 
-    <div class="section-label dot-purple">Shared</div>
-    <div id="groupShared" class="group"></div>
-
-    <div class="section-label dot-pink">Symmetry</div>
-    <div class="seg sym-seg" role="group" aria-label="Symmetry">
-      <button data-sym="off" class="active">Off</button>
-      <button data-sym="mirror">Mirror</button>
-      <button data-sym="radial">Radial</button>
+    <div class="pane-export">
+      <div class="section-label dot-orange">Export</div>
+      <button class="btn" id="exportTipPng">Export tip PNG</button>
+      <button class="btn" id="exportGbr">Export .GBR (GIMP)</button>
+      <button class="btn" id="exportKpp">Export .KPP (Krita)</button>
+      <button class="btn" id="exportCanvasPng">Export canvas PNG</button>
+      <button class="btn primary" id="shareBtn">Share this brush ↗</button>
     </div>
-    <div id="groupRadial" class="group only-radial"></div>
-
-    <div class="section-label dot-orange">Export</div>
-    <button class="btn" id="exportTipPng">Export tip PNG</button>
-    <button class="btn" id="exportGbr">Export .GBR (GIMP)</button>
-    <button class="btn" id="exportKpp">Export .KPP (Krita)</button>
-    <button class="btn" id="exportCanvasPng">Export canvas PNG</button>
-
-    <button class="btn primary" id="shareBtn">Share this brush ↗</button>
   </section>
 
-  <!-- ~~~~~~~~~~ drag to resize the canvas ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ drag to resize the canvas (desktop) ~~~~~~~~~~ -->
   <div class="splitter" id="splitter" title="Drag to resize the canvas" aria-hidden="true"><span></span></div>
 
   <!-- ~~~~~~~~~~ right: the canvas ~~~~~~~~~~ -->
@@ -659,23 +732,31 @@ body[data-sym="radial"] .only-radial{ display:block; }
           <button data-mode-btn="stamp" class="active">Stamp</button>
           <button data-mode-btn="flow">Flow</button>
         </div>
-        <span class="bar-spacer"></span>
-        <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
-        <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
-        <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
-        <label class="tbtn" title="Stamp tint color">
-          Color<span class="swatch" id="colorSwatch"></span>
-          <input type="color" id="colorInput" value="#ffffff">
-        </label>
-        <label class="tbtn" title="Canvas background">
-          BG<span class="swatch" id="bgSwatch"></span>
-          <input type="color" id="bgInput" value="#ffffff">
-        </label>
+        <div class="canvas-actions">
+          <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
+          <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+          <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
+          <label class="tbtn" title="Stamp tint color">
+            Color<span class="swatch" id="colorSwatch"></span>
+            <input type="color" id="colorInput" value="#ffffff">
+          </label>
+          <label class="tbtn" title="Canvas background">
+            BG<span class="swatch" id="bgSwatch"></span>
+            <input type="color" id="bgInput" value="#ffffff">
+          </label>
+        </div>
       </div>
 
       <div class="toast" id="toast"></div>
     </div>
   </section>
+
+  <!-- ~~~~~~~~~~ bottom tab bar (phones only) ~~~~~~~~~~ -->
+  <nav class="mobile-tabs" role="tablist" aria-label="Phone sections">
+    <button data-mtab="brush" class="active">Brush</button>
+    <button data-mtab="image">Image</button>
+    <button data-mtab="export">Export</button>
+  </nav>
 
 </div>
 
@@ -2003,6 +2084,18 @@ Forge.UI = (function () {
     refreshCutTol();
   }
 
+  /* ~~~~~~~~~~~~~~~~ phone tabs ~~~~~~~~~~~~~~~~ */
+
+  function initMobileTabs() {
+    const btns = document.querySelectorAll('.mobile-tabs [data-mtab]');
+    btns.forEach(b => b.addEventListener('click', () => {
+      document.body.dataset.mtab = b.dataset.mtab;
+      btns.forEach(x => x.classList.toggle('active', x === b));
+    }));
+    document.querySelectorAll('[data-share]').forEach(b =>
+      b.addEventListener('click', () => Forge.Share.share()));
+  }
+
   /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
 
   function initSplitter() {
@@ -2293,6 +2386,7 @@ Forge.UI = (function () {
     wireUpload();
     wireModal();
     wireCutout();
+    initMobileTabs();
     initSplitter();
     renderSaved();
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>forge · turn images into brushes</title>
 <meta name="description" content="Turn any image into a digital brush. Paint with its colors, test it live, export to GIMP and Krita.">
 <meta name="theme-color" content="#fdf9f0">
@@ -13,9 +13,20 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-mode="stamp" data-sym="off">
+<body data-mode="stamp" data-sym="off" data-mtab="brush">
 
 <div class="app" id="app">
+
+  <!-- ~~~~~~~~~~ mobile header (phones only) ~~~~~~~~~~ -->
+  <header class="mobile-head">
+    <div class="m-brand">
+      <div class="m-word">forge</div>
+      <svg class="squiggle" viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M2 6 Q 12 1, 24 5 T 46 5 T 68 5 T 90 5 T 118 4" fill="none" stroke="var(--red)" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <button class="tbtn" data-share>Share ↗</button>
+  </header>
 
   <!-- ~~~~~~~~~~ left: source material ~~~~~~~~~~ -->
   <aside class="panel left">
@@ -61,44 +72,47 @@
 
   <!-- ~~~~~~~~~~ middle: brush settings ~~~~~~~~~~ -->
   <section class="panel mid">
-    <div class="mode-seg" role="group" aria-label="Brush mode">
-      <button data-mode-btn="stamp" class="active">Stamp</button>
-      <button data-mode-btn="flow">Flow</button>
-    </div>
-
-    <div class="section-label dot-red only-stamp">Stamp engine</div>
-    <div id="groupStamp" class="group only-stamp"></div>
-
-    <div class="only-flow">
-      <div class="section-label dot-blue">Flow engine</div>
-      <div class="palette-wrap">
-        <canvas id="paletteStrip" class="palette-strip" width="256" height="12"></canvas>
-        <div class="palette-hint">colors from your tip, in order, smeared as you draw</div>
+    <div class="pane-brush">
+      <div class="mode-seg" role="group" aria-label="Brush mode">
+        <button data-mode-btn="stamp" class="active">Stamp</button>
+        <button data-mode-btn="flow">Flow</button>
       </div>
-      <div id="groupFlow" class="group"></div>
+
+      <div class="section-label dot-red only-stamp">Stamp engine</div>
+      <div id="groupStamp" class="group only-stamp"></div>
+
+      <div class="only-flow">
+        <div class="section-label dot-blue">Flow engine</div>
+        <div class="palette-wrap">
+          <canvas id="paletteStrip" class="palette-strip" width="256" height="12"></canvas>
+          <div class="palette-hint">colors from your tip, in order, smeared as you draw</div>
+        </div>
+        <div id="groupFlow" class="group"></div>
+      </div>
+
+      <div class="section-label dot-purple">Shared</div>
+      <div id="groupShared" class="group"></div>
+
+      <div class="section-label dot-pink">Symmetry</div>
+      <div class="seg sym-seg" role="group" aria-label="Symmetry">
+        <button data-sym="off" class="active">Off</button>
+        <button data-sym="mirror">Mirror</button>
+        <button data-sym="radial">Radial</button>
+      </div>
+      <div id="groupRadial" class="group only-radial"></div>
     </div>
 
-    <div class="section-label dot-purple">Shared</div>
-    <div id="groupShared" class="group"></div>
-
-    <div class="section-label dot-pink">Symmetry</div>
-    <div class="seg sym-seg" role="group" aria-label="Symmetry">
-      <button data-sym="off" class="active">Off</button>
-      <button data-sym="mirror">Mirror</button>
-      <button data-sym="radial">Radial</button>
+    <div class="pane-export">
+      <div class="section-label dot-orange">Export</div>
+      <button class="btn" id="exportTipPng">Export tip PNG</button>
+      <button class="btn" id="exportGbr">Export .GBR (GIMP)</button>
+      <button class="btn" id="exportKpp">Export .KPP (Krita)</button>
+      <button class="btn" id="exportCanvasPng">Export canvas PNG</button>
+      <button class="btn primary" id="shareBtn">Share this brush ↗</button>
     </div>
-    <div id="groupRadial" class="group only-radial"></div>
-
-    <div class="section-label dot-orange">Export</div>
-    <button class="btn" id="exportTipPng">Export tip PNG</button>
-    <button class="btn" id="exportGbr">Export .GBR (GIMP)</button>
-    <button class="btn" id="exportKpp">Export .KPP (Krita)</button>
-    <button class="btn" id="exportCanvasPng">Export canvas PNG</button>
-
-    <button class="btn primary" id="shareBtn">Share this brush ↗</button>
   </section>
 
-  <!-- ~~~~~~~~~~ drag to resize the canvas ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ drag to resize the canvas (desktop) ~~~~~~~~~~ -->
   <div class="splitter" id="splitter" title="Drag to resize the canvas" aria-hidden="true"><span></span></div>
 
   <!-- ~~~~~~~~~~ right: the canvas ~~~~~~~~~~ -->
@@ -112,23 +126,31 @@
           <button data-mode-btn="stamp" class="active">Stamp</button>
           <button data-mode-btn="flow">Flow</button>
         </div>
-        <span class="bar-spacer"></span>
-        <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
-        <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
-        <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
-        <label class="tbtn" title="Stamp tint color">
-          Color<span class="swatch" id="colorSwatch"></span>
-          <input type="color" id="colorInput" value="#ffffff">
-        </label>
-        <label class="tbtn" title="Canvas background">
-          BG<span class="swatch" id="bgSwatch"></span>
-          <input type="color" id="bgInput" value="#ffffff">
-        </label>
+        <div class="canvas-actions">
+          <button class="tbtn" id="clearBtn" title="Wipe the canvas">Clear</button>
+          <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+          <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
+          <label class="tbtn" title="Stamp tint color">
+            Color<span class="swatch" id="colorSwatch"></span>
+            <input type="color" id="colorInput" value="#ffffff">
+          </label>
+          <label class="tbtn" title="Canvas background">
+            BG<span class="swatch" id="bgSwatch"></span>
+            <input type="color" id="bgInput" value="#ffffff">
+          </label>
+        </div>
       </div>
 
       <div class="toast" id="toast"></div>
     </div>
   </section>
+
+  <!-- ~~~~~~~~~~ bottom tab bar (phones only) ~~~~~~~~~~ -->
+  <nav class="mobile-tabs" role="tablist" aria-label="Phone sections">
+    <button data-mtab="brush" class="active">Brush</button>
+    <button data-mtab="image">Image</button>
+    <button data-mtab="export">Export</button>
+  </nav>
 
 </div>
 
