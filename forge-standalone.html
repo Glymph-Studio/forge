@@ -556,10 +556,15 @@ body[data-sym="radial"] .only-radial{ display:block; }
   }
   .splitter{ display:none; }
 
+  /* the top bar becomes an empty shell on phone; the dock owns the mode toggle */
   .canvas-topbar{
-    left:0; right:0; top:8px;
-    justify-content:center;
+    position:static;
+    padding:0;
+    pointer-events:none;
   }
+  .canvas-topbar .mode-seg.mini{ display:none; }
+
+  /* actions anchor to the canvas card itself, along its bottom edge */
   .canvas-actions{
     position:absolute; left:8px; right:8px; bottom:10px;
     margin-left:0;
@@ -567,9 +572,13 @@ body[data-sym="radial"] .only-radial{ display:block; }
     pointer-events:none;
   }
   .canvas-actions > *{ pointer-events:auto; }
-  .canvas-actions .tbtn{ box-shadow:0 3px 14px rgba(74,65,54,.18); }
+  .canvas-actions .tbtn{ box-shadow:0 3px 14px rgba(74,65,54,.2); }
   .canvas-actions .tlabel{ display:none; }
-  .canvas-actions label.tbtn{ padding:9px 11px; }
+  .canvas-actions label.tbtn{ padding:10px 11px; }
+  .canvas-actions .swatch{
+    width:16px; height:16px;
+    box-shadow:0 0 0 1.5px var(--line2), inset 0 1px 4px rgba(74,65,54,.22);
+  }
   .toast{ bottom:74px; }
 
   /* ~~~~ dock: mode + tools button ~~~~ */
@@ -830,11 +839,11 @@ body[data-sym="radial"] .only-radial{ display:block; }
           <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
           <label class="tbtn" title="Stamp tint color">
             <span class="tlabel">Color</span><span class="swatch" id="colorSwatch"></span>
-            <input type="color" id="colorInput" value="#ffffff">
+            <input type="color" id="colorInput" value="#ffffff" aria-label="Stamp tint color">
           </label>
           <label class="tbtn" title="Canvas background">
             <span class="tlabel">BG</span><span class="swatch" id="bgSwatch"></span>
-            <input type="color" id="bgInput" value="#ffffff">
+            <input type="color" id="bgInput" value="#ffffff" aria-label="Canvas background color">
           </label>
         </div>
       </div>
