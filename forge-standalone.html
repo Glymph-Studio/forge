@@ -15,6 +15,9 @@
 /* ============================================================
    forge · style.css
    soft crayon on paper. rounded, wobbly, friendly.
+   desktop: three columns with a drag handle.
+   phone: canvas-first app with a bottom sheet. see the media
+   query at the bottom, it is a layout of its own.
    ============================================================ */
 
 :root{
@@ -48,9 +51,10 @@ body{
   font-family:'Nunito', ui-rounded, system-ui, -apple-system, sans-serif;
   font-size:14px;
   -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
 }
 
-button{ font-family:inherit; background:none; border:none; color:inherit; cursor:pointer; }
+button{ font-family:inherit; background:none; border:none; color:inherit; cursor:pointer; touch-action:manipulation; }
 input{ font-family:inherit; color:inherit; }
 
 :focus-visible{ outline:2px dashed var(--red); outline-offset:2px; }
@@ -313,10 +317,6 @@ input[type=range]:disabled{ opacity:.4; cursor:default; }
 .seg button.active{ background:var(--purple); color:#fff; box-shadow:0 2px 8px rgba(183,156,245,.45); }
 .seg button:not(.active):hover{ color:var(--ink); }
 
-.mode-seg.mini{ margin:0; padding:3px; gap:3px; }
-.mode-seg.mini button{ padding:6px 12px; font-size:11.5px; flex:none; }
-.bar-spacer{ flex:1; }
-
 /* ~~~~~~~~~~~~~~~~ buttons ~~~~~~~~~~~~~~~~ */
 
 .btn{
@@ -405,6 +405,8 @@ input[type=range]:disabled{ opacity:.4; cursor:default; }
   opacity:0; pointer-events:none; border:0; padding:0;
 }
 
+.canvas-actions{ display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
+
 .toast{
   position:absolute; bottom:16px; left:50%;
   transform:translateX(-50%) translateY(4px);
@@ -485,9 +487,6 @@ body[data-mode="flow"]  .only-stamp{ display:none; }
 body[data-mode="flow"]  .only-flow{ display:block; }
 body[data-sym="radial"] .only-radial{ display:block; }
 
-.mode-seg.desktop-only{ display:flex; }
-.mode-seg.mini{ display:none; }
-
 /* ~~~~~~~~~~~~~~~~ png maker (cutout) ~~~~~~~~~~~~~~~~ */
 
 .cutout-block{ display:flex; flex-direction:column; gap:4px; }
@@ -507,134 +506,207 @@ body[data-sym="radial"] .only-radial{ display:block; }
 
 .tbtn:disabled{ opacity:.4; pointer-events:none; }
 
-/* ~~~~~~~~~~~~~~~~ mobile chrome (hidden on desktop) ~~~~~~~~~~~~~~~~ */
+/* ~~~~~~~~~~~~~~~~ phone only chrome (hidden on desktop) ~~~~~~~~~~~~~~~~ */
 
-.mobile-head, .mobile-tabs{ display:none; }
+.mobile-head, .m-dock, .m-scrim, .sheet-head{ display:none; }
 
-.canvas-actions{ display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
-
-/* ~~~~~~~~~~~~~~~~ phone + tablet · a real mobile layout ~~~~~~~~~~~~~~~~
-   header on top, canvas always in view, bottom tab bar, one tool pane
-   at a time. no horizontal anything. */
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   PHONE · its own app shell
+   header / canvas card / dock / bottom sheet. the canvas is the
+   screen; every tool slides up from the bottom over it.
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 @media (max-width: 960px){
 
-  html, body{ height:100%; overflow:hidden; overscroll-behavior:none; }
+  html, body{
+    height:100%; overflow:hidden;
+    overscroll-behavior:none;
+  }
+  body{
+    position:fixed; left:0; right:0; top:0; bottom:0; width:100%;
+  }
 
   .app{
     flex-direction:column;
     height:100vh; height:100dvh;
     overflow:hidden;
   }
+  .app > *{ min-width:0; }
 
-  /* compact header */
+  /* ~~~~ compact header ~~~~ */
   .mobile-head{
     display:flex; align-items:center; justify-content:space-between;
-    flex:none; order:1;
-    padding:10px 14px 8px;
+    flex:none;
+    padding:10px 14px 4px;
   }
   .m-word{
     font-family:'Caveat','Comic Sans MS',cursive;
-    font-weight:700; font-size:27px; line-height:1; color:var(--ink);
+    font-weight:700; font-size:28px; line-height:1; color:var(--ink);
   }
-  .mobile-head .squiggle{ width:78px; height:8px; display:block; margin-top:2px; }
+  .mobile-head .squiggle{ width:76px; height:8px; display:block; margin-top:1px; }
+  .mobile-head .tbtn{ padding:8px 13px; }
 
-  /* the canvas docks under the header and stays there */
+  /* ~~~~ the canvas is the screen ~~~~ */
   .panel.right{
-    order:2; flex:none;
-    height:46vh; height:46dvh; min-height:270px;
-    border-bottom:2px solid var(--line);
+    flex:1; min-height:0; width:auto;
+    margin:6px 10px 8px;
+    border:2px solid var(--line);
+    border-radius:20px;
+    background:var(--panel);
   }
   .splitter{ display:none; }
 
-  /* mode toggle floats top left over the canvas */
   .canvas-topbar{
-    left:10px; right:auto; top:10px;
-    pointer-events:none;
+    left:0; right:0; top:8px;
+    justify-content:center;
   }
-  .canvas-topbar > *{ pointer-events:auto; }
-
-  /* actions float along the bottom of the canvas, thumb friendly */
   .canvas-actions{
-    position:absolute; left:10px; right:10px; bottom:12px;
+    position:absolute; left:8px; right:8px; bottom:10px;
     margin-left:0;
-    display:flex; justify-content:center; flex-wrap:wrap; gap:8px;
+    justify-content:center; flex-wrap:wrap; gap:8px;
     pointer-events:none;
   }
   .canvas-actions > *{ pointer-events:auto; }
-  .canvas-actions .tbtn{ box-shadow:0 3px 12px rgba(74,65,54,.16); }
-  .toast{ bottom:70px; }
+  .canvas-actions .tbtn{ box-shadow:0 3px 14px rgba(74,65,54,.18); }
+  .canvas-actions .tlabel{ display:none; }
+  .canvas-actions label.tbtn{ padding:9px 11px; }
+  .toast{ bottom:74px; }
 
-  /* tool panes: one at a time, each scrolls on its own */
-  .panel.left, .panel.mid{
-    order:3; flex:1 1 0; min-height:0; width:auto;
-    border-right:none; border-top:none;
-    overflow-y:auto; -webkit-overflow-scrolling:touch;
-    padding:16px 16px 28px;
-  }
-  .panel.left{ display:none; }
-  .panel.left .wordmark{ display:none; }
-  .panel.left .section-label:first-of-type{ margin-top:2px; }
-  .credit{ margin-top:20px; padding:12px 0 4px; }
-
-  body[data-mtab="image"]  .panel.left{ display:block; }
-  body[data-mtab="image"]  .panel.mid{ display:none; }
-  body[data-mtab="brush"]  .pane-export{ display:none; }
-  body[data-mtab="export"] .pane-brush{ display:none; }
-
-  .pane-export .btn{ padding:13px 12px; }
-
-  /* bottom tab bar */
-  .mobile-tabs{
-    display:flex; flex:none; order:4;
-    gap:6px;
-    padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  /* ~~~~ dock: mode + tools button ~~~~ */
+  .m-dock{
+    display:flex; align-items:stretch; gap:8px; flex:none;
+    padding:8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
     background:var(--panel);
     border-top:2px solid var(--line);
   }
-  .mobile-tabs button{
-    flex:1; padding:12px 0;
-    font-size:13px; font-weight:800;
-    color:var(--muted);
-    background:var(--paper);
+  .m-dock .mode-seg{ flex:1; margin:0; }
+  .m-dock .mode-seg button{ padding:12px 0; font-size:14px; }
+  .m-tools-btn{
+    flex:none; padding:0 20px;
     border-radius:99px;
+    background:var(--yellow);
+    border:2px solid var(--line);
+    color:var(--ink);
+    font-size:13px; font-weight:800;
+    transition:transform .12s;
+  }
+  .m-tools-btn:active{ transform:scale(.95); }
+
+  /* ~~~~ bottom sheet: the tools ~~~~ */
+  .panel.left,
+  .panel.mid{
+    position:fixed; left:0; right:0; bottom:0;
+    width:auto; flex:none;
+    max-height:74vh; max-height:74dvh;
+    border:2px solid var(--line); border-bottom:none;
+    border-radius:24px 24px 0 0;
+    padding:0 18px calc(28px + env(safe-area-inset-bottom, 0px));
+    z-index:50;
+    transform:translateY(104%);
+    visibility:hidden;
+    transition:transform .3s cubic-bezier(.3,.9,.35,1), visibility 0s .3s;
+  }
+  body[data-sheet="image"]  .panel.left,
+  body[data-sheet="brush"]  .panel.mid,
+  body[data-sheet="export"] .panel.mid{
+    transform:translateY(0);
+    visibility:visible;
+    transition:transform .3s cubic-bezier(.3,.9,.35,1);
+    overflow-y:auto; -webkit-overflow-scrolling:touch;
+  }
+
+  .panel.left{ display:flex; flex-direction:column; gap:16px; }
+  .panel.left .wordmark{ display:none; }
+
+  .m-scrim{
+    display:block; position:fixed; inset:0;
+    background:rgba(74,65,54,.34);
+    z-index:45;
+    opacity:0; pointer-events:none;
+    transition:opacity .25s;
+  }
+  body:not([data-sheet="none"]) .m-scrim{ opacity:1; pointer-events:auto; }
+
+  .sheet-head{
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+    position:sticky; top:0; z-index:3;
+    background:var(--panel);
+    margin:0 -8px; padding:6px 8px 10px;
+  }
+  .sheet-grip{
+    flex-basis:100%;
+    display:block; width:46px; height:5px;
+    border-radius:99px; background:var(--line2);
+    margin:2px auto 0;
+  }
+  .sheet-tabs{
+    display:flex; gap:5px; flex:1;
+    background:var(--paper);
+    border-radius:99px; padding:4px;
+  }
+  .sheet-tabs button{
+    flex:1; padding:10px 0;
+    font-size:12.5px; font-weight:800;
+    color:var(--muted); border-radius:99px;
     transition:all .15s;
   }
-  .mobile-tabs button.active[data-mtab="brush"]{ color:#fff; background:var(--red); box-shadow:0 2px 8px rgba(255,139,139,.5); }
-  .mobile-tabs button.active[data-mtab="image"]{ color:#fff; background:var(--green); box-shadow:0 2px 8px rgba(143,214,148,.5); }
-  .mobile-tabs button.active[data-mtab="export"]{ color:#fff; background:var(--blue); box-shadow:0 2px 8px rgba(124,195,247,.5); }
+  .sheet-tabs button.active[data-sheet-tab="brush"]{ background:var(--red); color:#fff; box-shadow:0 2px 8px rgba(255,139,139,.5); }
+  .sheet-tabs button.active[data-sheet-tab="image"]{ background:var(--green); color:#fff; box-shadow:0 2px 8px rgba(143,214,148,.5); }
+  .sheet-tabs button.active[data-sheet-tab="export"]{ background:var(--blue); color:#fff; box-shadow:0 2px 8px rgba(124,195,247,.5); }
+  .sheet-close{
+    flex:none; width:38px; height:38px;
+    border-radius:50%;
+    background:var(--paper);
+    color:var(--muted); font-size:14px; font-weight:800;
+  }
+  .sheet-close:active{ transform:scale(.92); }
+
+  /* pane switching inside the mid sheet */
+  body[data-sheet="brush"]  .pane-export{ display:none; }
+  body[data-sheet="export"] .pane-brush{ display:none; }
+  .pane-export .btn{ padding:14px 12px; font-size:13px; }
+
+  /* ~~~~ finger sized controls ~~~~ */
+  .row{ margin-bottom:18px; }
+  input[type=range]{ height:30px; }
+  input[type=range]::-webkit-slider-thumb{ width:22px; height:22px; margin-top:-8px; }
+  input[type=range]::-moz-range-thumb{ width:18px; height:18px; }
+  .upload-zone{ padding:22px 14px; }
+  .btn{ padding:13px 12px; }
+  .tbtn{ padding:9px 13px; }
+  .modal input{ font-size:16px; }
+  .credit{ margin-top:22px; padding:12px 0 2px; }
 }
 
-@media (max-width: 480px){
+@media (max-width: 420px){
   .canvas-actions .tbtn{ padding:8px 9px; font-size:11px; }
-  .canvas-actions .swatch{ width:11px; height:11px; }
-  .mode-seg.mini button{ padding:6px 9px; font-size:10.5px; }
-  .tbtn{ padding:6px 9px; font-size:11px; }
+  .canvas-actions .swatch{ width:12px; height:12px; }
+  .tbtn{ padding:8px 10px; font-size:11px; }
+  .m-dock .mode-seg button{ font-size:13px; }
+  .m-tools-btn{ padding:0 14px; font-size:12px; }
 }
 
-/* phones: draw on top, pick your tools from the tabs below.
-   on desktop the little handle between the panels still resizes
-   the canvas horizontally. */
-/
+/* phone: draw on top, tap Tools for the sheet, pick tabs inside it.
+   desktop: the little handle between the panels still resizes the canvas. */
 
 </style>
 </head>
-<body data-mode="stamp" data-sym="off" data-mtab="brush">
+<body data-mode="stamp" data-sym="off" data-mtab="brush" data-sheet="none">
 
 <div class="app" id="app">
 
-  <!-- ~~~~~~~~~~ mobile header (phones only) ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ phone header (phones only) ~~~~~~~~~~ -->
   <header class="mobile-head">
     <div class="m-brand">
       <div class="m-word">forge</div>
       <svg class="squiggle" viewBox="0 0 120 10" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M2 6 Q 12 1, 24 5 T 46 5 T 68 5 T 90 5 T 118 4" fill="none" stroke="var(--red)" stroke-width="4" stroke-linecap="round"/>
+        <path d="M2 6 Q 12 1, 24 5 T 46 5 T 68 5 T 90 5 T 118 4" fill="none" stroke="var(--red)" stroke-width="5" stroke-linecap="round"/>
       </svg>
     </div>
     <button class="tbtn" data-share>Share ↗</button>
   </header>
 
-  <!-- ~~~~~~~~~~ left: source material ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ left: source material (desktop column · phone sheet) ~~~~~~~~~~ -->
   <aside class="panel left">
     <header class="wordmark">
       forge
@@ -643,20 +715,30 @@ body[data-sym="radial"] .only-radial{ display:block; }
       </svg>
     </header>
 
+    <div class="sheet-head">
+      <span class="sheet-grip" aria-hidden="true"></span>
+      <div class="sheet-tabs" role="tablist">
+        <button data-sheet-tab="brush">Brush</button>
+        <button data-sheet-tab="image">Image</button>
+        <button data-sheet-tab="export">Export</button>
+      </div>
+      <button class="sheet-close" data-sheet-close aria-label="Close tools">✕</button>
+    </div>
+
     <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Upload brush tip image">
       <span class="uz-title">Upload brush tip</span>
-      <span class="uz-sub">PNG · JPG · SVG<br>click or drop, or tap a starter tip</span>
+      <span class="uz-sub">PNG · JPG · SVG<br>tap or drop, or pick a starter tip</span>
     </div>
     <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" hidden>
 
     <div class="preview-block">
-      <div class="tip-preview"><canvas id="tipPreviewCanvas" width="256" height="256" title="Click a color to erase it"></canvas></div>
+      <div class="tip-preview"><canvas id="tipPreviewCanvas" width="256" height="256" title="Tap a color to erase it"></canvas></div>
       <div class="tip-name" id="tipNameLabel">no tip yet</div>
     </div>
 
     <div class="cutout-block" id="cutoutBlock">
       <div class="section-label dot-pink">Png maker</div>
-      <div class="cutout-hint">Click a color on the image above to erase it. Flat backgrounds come out clean, ready to export as a transparent PNG.</div>
+      <div class="cutout-hint">Tap a color on the image above and forge erases it, edges softened. Flat backgrounds come out clean, ready to export as a transparent PNG.</div>
       <div class="row">
         <div class="row-top"><label for="cutTol">Eraser reach</label><span class="val" id="cutTolVal">15%</span></div>
         <input type="range" id="cutTol" min="0.02" max="1" step="0.01" value="0.15">
@@ -676,8 +758,18 @@ body[data-sym="radial"] .only-radial{ display:block; }
     </footer>
   </aside>
 
-  <!-- ~~~~~~~~~~ middle: brush settings ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ middle: brush settings (desktop column · phone sheet) ~~~~~~~~~~ -->
   <section class="panel mid">
+    <div class="sheet-head">
+      <span class="sheet-grip" aria-hidden="true"></span>
+      <div class="sheet-tabs" role="tablist">
+        <button data-sheet-tab="brush">Brush</button>
+        <button data-sheet-tab="image">Image</button>
+        <button data-sheet-tab="export">Export</button>
+      </div>
+      <button class="sheet-close" data-sheet-close aria-label="Close tools">✕</button>
+    </div>
+
     <div class="pane-brush">
       <div class="mode-seg" role="group" aria-label="Brush mode">
         <button data-mode-btn="stamp" class="active">Stamp</button>
@@ -718,10 +810,10 @@ body[data-sym="radial"] .only-radial{ display:block; }
     </div>
   </section>
 
-  <!-- ~~~~~~~~~~ drag to resize the canvas (desktop) ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ drag to resize the canvas (desktop only) ~~~~~~~~~~ -->
   <div class="splitter" id="splitter" title="Drag to resize the canvas" aria-hidden="true"><span></span></div>
 
-  <!-- ~~~~~~~~~~ right: the canvas ~~~~~~~~~~ -->
+  <!-- ~~~~~~~~~~ the canvas ~~~~~~~~~~ -->
   <section class="panel right" id="canvasPanel">
     <div class="canvas-wrap" id="canvasWrap">
       <canvas id="canvas"></canvas>
@@ -737,11 +829,11 @@ body[data-sym="radial"] .only-radial{ display:block; }
           <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
           <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y or Ctrl+Shift+Z)">Redo</button>
           <label class="tbtn" title="Stamp tint color">
-            Color<span class="swatch" id="colorSwatch"></span>
+            <span class="tlabel">Color</span><span class="swatch" id="colorSwatch"></span>
             <input type="color" id="colorInput" value="#ffffff">
           </label>
           <label class="tbtn" title="Canvas background">
-            BG<span class="swatch" id="bgSwatch"></span>
+            <span class="tlabel">BG</span><span class="swatch" id="bgSwatch"></span>
             <input type="color" id="bgInput" value="#ffffff">
           </label>
         </div>
@@ -751,12 +843,17 @@ body[data-sym="radial"] .only-radial{ display:block; }
     </div>
   </section>
 
-  <!-- ~~~~~~~~~~ bottom tab bar (phones only) ~~~~~~~~~~ -->
-  <nav class="mobile-tabs" role="tablist" aria-label="Phone sections">
-    <button data-mtab="brush" class="active">Brush</button>
-    <button data-mtab="image">Image</button>
-    <button data-mtab="export">Export</button>
-  </nav>
+  <!-- ~~~~~~~~~~ phone dock (phones only) ~~~~~~~~~~ -->
+  <div class="m-dock">
+    <div class="mode-seg" role="group" aria-label="Brush mode">
+      <button data-mode-btn="stamp" class="active">Stamp</button>
+      <button data-mode-btn="flow">Flow</button>
+    </div>
+    <button class="m-tools-btn" data-sheet-open>Tools ▲</button>
+  </div>
+
+  <!-- ~~~~~~~~~~ phone scrim (tap to close the sheet) ~~~~~~~~~~ -->
+  <div class="m-scrim" data-sheet-close aria-hidden="true"></div>
 
 </div>
 
@@ -2084,16 +2181,34 @@ Forge.UI = (function () {
     refreshCutTol();
   }
 
-  /* ~~~~~~~~~~~~~~~~ phone tabs ~~~~~~~~~~~~~~~~ */
+  /* ~~~~~~~~~~~~~~~~ phone shell: bottom sheet + dock ~~~~~~~~~~~~~~~~ */
 
-  function initMobileTabs() {
-    const btns = document.querySelectorAll('.mobile-tabs [data-mtab]');
-    btns.forEach(b => b.addEventListener('click', () => {
-      document.body.dataset.mtab = b.dataset.mtab;
-      btns.forEach(x => x.classList.toggle('active', x === b));
-    }));
+  function setSheet(s) {
+    if (s !== 'none') Forge.UI._lastSheet = s;
+    document.body.dataset.sheet = s;
+    document.querySelectorAll('[data-sheet-tab]').forEach(b =>
+      b.classList.toggle('active', b.dataset.sheetTab === s));
+  }
+
+  function initPhoneShell() {
+    Forge.UI._lastSheet = 'brush';
+    document.querySelectorAll('[data-sheet-tab]').forEach(b =>
+      b.addEventListener('click', () => {
+        const s = b.dataset.sheetTab;
+        if (s === 'brush' || s === 'export') document.body.dataset.mtab = s;
+        setSheet(s);
+      }));
+
+    document.querySelectorAll('[data-sheet-close]').forEach(b =>
+      b.addEventListener('click', () => setSheet('none')));
+
+    const open = document.querySelector('[data-sheet-open]');
+    if (open) open.addEventListener('click', () => setSheet(Forge.UI._lastSheet || 'brush'));
+
     document.querySelectorAll('[data-share]').forEach(b =>
       b.addEventListener('click', () => Forge.Share.share()));
+
+    setSheet('none');
   }
 
   /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
@@ -2386,7 +2501,7 @@ Forge.UI = (function () {
     wireUpload();
     wireModal();
     wireCutout();
-    initMobileTabs();
+    initPhoneShell();
     initSplitter();
     renderSaved();
 

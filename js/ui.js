@@ -193,16 +193,34 @@ Forge.UI = (function () {
     refreshCutTol();
   }
 
-  /* ~~~~~~~~~~~~~~~~ phone tabs ~~~~~~~~~~~~~~~~ */
+  /* ~~~~~~~~~~~~~~~~ phone shell: bottom sheet + dock ~~~~~~~~~~~~~~~~ */
 
-  function initMobileTabs() {
-    const btns = document.querySelectorAll('.mobile-tabs [data-mtab]');
-    btns.forEach(b => b.addEventListener('click', () => {
-      document.body.dataset.mtab = b.dataset.mtab;
-      btns.forEach(x => x.classList.toggle('active', x === b));
-    }));
+  function setSheet(s) {
+    if (s !== 'none') Forge.UI._lastSheet = s;
+    document.body.dataset.sheet = s;
+    document.querySelectorAll('[data-sheet-tab]').forEach(b =>
+      b.classList.toggle('active', b.dataset.sheetTab === s));
+  }
+
+  function initPhoneShell() {
+    Forge.UI._lastSheet = 'brush';
+    document.querySelectorAll('[data-sheet-tab]').forEach(b =>
+      b.addEventListener('click', () => {
+        const s = b.dataset.sheetTab;
+        if (s === 'brush' || s === 'export') document.body.dataset.mtab = s;
+        setSheet(s);
+      }));
+
+    document.querySelectorAll('[data-sheet-close]').forEach(b =>
+      b.addEventListener('click', () => setSheet('none')));
+
+    const open = document.querySelector('[data-sheet-open]');
+    if (open) open.addEventListener('click', () => setSheet(Forge.UI._lastSheet || 'brush'));
+
     document.querySelectorAll('[data-share]').forEach(b =>
       b.addEventListener('click', () => Forge.Share.share()));
+
+    setSheet('none');
   }
 
   /* ~~~~~~~~~~~~~~~~ splitter: drag to resize the canvas ~~~~~~~~~~~~~~~~ */
@@ -495,7 +513,7 @@ Forge.UI = (function () {
     wireUpload();
     wireModal();
     wireCutout();
-    initMobileTabs();
+    initPhoneShell();
     initSplitter();
     renderSaved();
 
